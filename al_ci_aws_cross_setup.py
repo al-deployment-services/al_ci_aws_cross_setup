@@ -26,7 +26,7 @@ schema = {
                 "properties": {
                     "type" : {
                         "type": "string",
-                        "enum": [ "vpc", "region"]
+                        "enum": [ "vpc", "region", "subnet"]
                     },
                     "key": {
                         "type": "string",
@@ -45,7 +45,7 @@ schema = {
                 "properties": {
                     "type" : {
                         "type": "string",
-                        "enum": [ "vpc", "region"]
+                        "enum": [ "vpc", "region", "subnet"]
                     },
                     "key": {
                         "type": "string",
