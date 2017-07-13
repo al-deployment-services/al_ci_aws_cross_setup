@@ -1,0 +1,18 @@
+{
+    "include": [
+        {
+            "type": "vpc",
+            "key" : "/aws/us-west-1/vpc/vpc-7a0a6d1e"
+        },
+        {
+            "key": "/aws/us-east-2",
+            "type": "region"
+        }       
+    ],
+    "exclude": [
+      {
+        "key": "/aws/us-east-2/vpc/vpc-800c7fe9",
+        "type": "vpc"
+      }
+    ]   
+}
