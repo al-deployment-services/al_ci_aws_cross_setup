@@ -1,9 +1,10 @@
 Wrapper for Launching Alert Logic Cloud Insight Environment
-=================
+===========================================================
 This script will register credentials and launch new Cloud Insight environment based on the given scope. Components that will be created:
 
 - New Credentials based on the provided IAM role + external ID 
 - New Cloud Insight environment based on the given credentials and scope 
+
 
 Requirements
 ------------
@@ -12,12 +13,40 @@ Requirements
 * IAM role for Cloud Insight (see https://docs.alertlogic.com/gsg/amazon-web-services-cloud-insight-get-started.htm )
 * JSON file consisting the scope of VPC or regions to protect
 
-Sample usage
-----------
 
-`python al_ci_aws_cross_setup.py --user first.last@company.com --pswd MyCloudInsightPassword --cid 10000 --aws 052672429986 --arn arn:aws:iam::052672429986:role/AlertLogicCrossAccountCI --ext My_ext_id --cred TestArgCred --env TestEnv --scope input.json`
+Deployment Mode
+---------------
+* DISC = launch Cloud Insight with or without scope, initiate AWS environment discovery
+* ADD = update existing Cloud Insight environment with new scope
+* DEL = delete the existing Cloud Insight environment
 
-The input.json file sample can be found inside this repository
+
+Sample Usage - Discovery
+------------------------
+Discovery with scope, replace the parameters to match your environment and run this command ::
+
+    python al_ci_aws_cross_setup.py DISC --user first.last@company.com --pswd MyCloudInsightPassword --cid 10000 --aws 052672429986 --arn arn:aws:iam::052672429986:role/AlertLogicCrossAccountCI --ext My_ext_id --cred TestArgCred --env TestEnv --scope input.json
+
+Discovery only, replace the parameters to match your environment and run this command ::
+
+    python al_ci_aws_cross_setup.py --user first.last@company.com --pswd MyCloudInsightPassword --cid 10000 --aws 052672429986 --arn arn:aws:iam::052672429986:role/AlertLogicCrossAccountCI --ext My_ext_id --cred TestArgCred --env TestEnv
+
+Take note of the output from the script, you will need to record the Environment ID if you wish to delete it later using this script (see below)
+
+Sample Usage - Add
+------------------
+Add scope to existing environment, replace the parameters to match your environment and run this command ::
+
+    python al_ci_aws_cross_setup.py ADD --user first.last@company.com --pswd MyCloudInsightPassword --cid 10000 --envid 89C90B43-7C50-4766-8ECD-37F9B9CD150B --scope input.json
+
+Take note of the output from the script, you will need to record the Environment ID if you wish to delete it later using this script (see below)
+
+Sample Usage - Delete
+---------------------
+Delete existing environment, replace the parameters to match your environment and run this command ::
+
+    python al_ci_aws_cross_setup.py DEL --user first.last@company.com --pswd MyCloudInsightPassword --cid 10000 --envid 89C90B43-7C50-4766-8ECD-37F9B9CD150B
+
 
 Arguments
 ----------
@@ -31,6 +60,9 @@ Arguments
   --cred CRED  Credential name, free form label, not visible in Alert Logic UI
   --env ENV    Environment name, will be displayed in Alert Logic UI under Deployment
   --scope      json formated file with the VPC scope details
+
+The input.json file sample can be found inside this repository, more details about the schema can be found in here:
+* https://console.cloudinsight.alertlogic.com/api/sources/#api-JSON_Formats-AWSEnvironmentSourceJSONFormat
 
 License and Authors
 ===================
