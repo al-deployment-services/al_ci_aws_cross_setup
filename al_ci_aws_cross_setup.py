@@ -3,7 +3,7 @@
 # Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License.
 
 from __future__ import print_function
-import json, requests, datetime, sys, argparse
+import json, requests, datetime, sys, argparse, time
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 import jsonschema
 from jsonschema import validate
@@ -14,6 +14,7 @@ requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 #API Endpoint
 YARP_URL="api.cloudinsight.alertlogic.com"
 ALERT_LOGIC_CI_SOURCE = "https://api.cloudinsight.alertlogic.com/sources/v1/"
+ALERT_LOGIC_CI_LAUNCHER = "https://api.cloudinsight.alertlogic.com/launcher/v1/"
 
 # Using jsonschema Python library. (http://json-schema.org)
 # Schema for scope in Cloud Insight source
@@ -208,6 +209,73 @@ def get_source_environment(token, target_env, target_cid):
 		RESULT['source']['id'] = "n/a"
 	return RESULT
 
+def get_launcher_status(token, target_env, target_cid):
+	#Check if Launcher is completed
+	API_ENDPOINT = ALERT_LOGIC_CI_LAUNCHER + target_cid + "/environments/" + target_env
+	REQUEST = requests.get(API_ENDPOINT, headers={'x-aims-auth-token': token}, verify=False)
+	
+	print ("Retrieving Environment launch status : " + str(REQUEST.status_code), str(REQUEST.reason))
+	if REQUEST.status_code == 200:		
+		RESULT = json.loads(REQUEST.text)
+	else:		
+		RESULT = {}
+		RESULT['scope'] = "n/a"
+		
+	return RESULT
+
+def get_launcher_data(token, target_env, target_cid):
+	#Get all AWS related resource deployed by Cloud Insight
+	API_ENDPOINT = ALERT_LOGIC_CI_LAUNCHER + target_cid + "/" + target_env + "/resources"
+	REQUEST = requests.get(API_ENDPOINT, headers={'x-aims-auth-token': token}, verify=False)
+	
+	print ("Retrieving Environment resources data : " + str(REQUEST.status_code), str(REQUEST.reason))
+	if REQUEST.status_code == 200:		
+		RESULT = json.loads(REQUEST.text)
+	else:		
+		RESULT = {}
+		RESULT['environment_id'] = "n/a"
+		
+	return RESULT
+
+def launcher_wait_state(token, target_env, target_cid):
+	#Wait for launcher to be fully deployed
+	print ("\n### Check Launcher Status ###")
+	
+	while True:
+		#Get Launcher Status and check for each region / VPC
+		LAUNCHER_RESULT = get_launcher_status(token, target_env, target_cid)
+		if LAUNCHER_RESULT["scope"] != "n/a":
+			LAUNCHER_FLAG = True
+
+			for LAUNCHER_REGION in LAUNCHER_RESULT["scope"]:
+				print ("Region : " + str(LAUNCHER_REGION["key"])  + " status : " + str(LAUNCHER_REGION["protection_state"]) )
+				if LAUNCHER_REGION["protection_state"] != "completed":
+					LAUNCHER_FLAG = False
+			
+			if LAUNCHER_FLAG == True:								
+				print ("\n### Launcher Completed Successfully ###")
+				LAUNCHER_RETRY = 5
+
+				while LAUNCHER_RETRY > 0:									
+					LAUNCHER_DATA = get_launcher_data(token, target_env, target_cid)
+					if LAUNCHER_DATA["environment_id"] != "n/a":
+						print ("\n### Successfully retrieve Launcher data ###")
+						for LAUNCHER_VPC in LAUNCHER_DATA["vpcs"]:
+							print ("Region: " + str(LAUNCHER_VPC["region"]))
+							print ("VPC: " + str(LAUNCHER_VPC["vpc_key"]))
+							print ("SG: " + str(LAUNCHER_VPC["security_group"]["resource_id"]))
+							print ("\n")
+						LAUNCHER_RETRY = 0
+					else:
+						print ("\n### Failed to retrieve Launcher Data, see response code + reason above, retrying in 10 seconds ###")
+						time.sleep(10)
+						LAUNCHER_RETRY = LAUNCHER_RETRY -1
+
+				break
+
+		#Sleep for 10 seconds
+		time.sleep(10)
+
 def failback(token, cred_id, target_cid):
 	#Failback, delete credentials if create environment failed
 	API_ENDPOINT = ALERT_LOGIC_CI_SOURCE + target_cid + "/credentials/" + cred_id
@@ -290,7 +358,7 @@ if __name__ == '__main__':
 		CRED_ID = str(CRED_RESULT['credential']['id'])
 
 		if CRED_ID != "n/a":		
-			print ("   Cred ID : " + CRED_ID)
+			print ("Cred ID : " + CRED_ID)
 			
 			#Check if scope provided 
 			if args.scope:
@@ -303,13 +371,14 @@ if __name__ == '__main__':
 					#Check input file against the json schema to make sure it's valid
 					if scope_schema_check(INPUT_SCOPE):
 						print ("\n### Schema validation OK - continue to add environment scope ###")
-
+						VALID_SCOPE = True
 					else:
 						print ("\n### Schema validation issues, please read error message above ###")
 						#Prepare empty scope
 						INPUT_SCOPE = {}
 						INPUT_SCOPE["include"] = []
 						INPUT_SCOPE["exclude"] = []
+						VALID_SCOPE = False
 
 			else:
 				print ("### No scope available ###")
@@ -317,6 +386,7 @@ if __name__ == '__main__':
 				INPUT_SCOPE = {}
 				INPUT_SCOPE["include"] = []
 				INPUT_SCOPE["exclude"] = []
+				VALID_SCOPE = False
 
 			#Create new environment using credentials ID and target AWS Account number
 			ENV_PAYLOAD = prep_ci_source_environment(TARGET_AWS_ACCOUNT, CRED_ID, TARGET_ENV_NAME, INPUT_SCOPE)			
@@ -324,8 +394,16 @@ if __name__ == '__main__':
 			ENV_ID = str(ENV_RESULT['source']['id'])
 
 			if ENV_ID != "n/a":
-				print ("   Env ID : " + ENV_ID)
+				print ("Env ID : " + ENV_ID)
 				print ("\n### Cloud Insight Environment created successfully ###")
+
+				#If Scope included, do LAuncher check
+				if args.scope and VALID_SCOPE:										
+					#Check and wait until launcher completed
+					launcher_wait_state(TOKEN, ENV_ID, TARGET_CID)
+				else:
+					print ("\n### No scope defined, skipping Launcher Status ###")
+
 			else:
 				print ("### Failed to create environment source, see response code + reason above, starting fallback .. ###")
 				failback(TOKEN, CRED_ID, TARGET_CID)
@@ -367,6 +445,10 @@ if __name__ == '__main__':
 					if ENV_ID != "n/a":
 						print ("   Env ID : " + ENV_ID)
 						print ("\n### Cloud Insight Environment updated successfully ###")
+
+						#Check and wait until launcher completed
+						launcher_wait_state(TOKEN, ENV_ID, TARGET_CID)
+						
 					else:
 						print ("### Failed to update environment scope, see response code + reason above, starting fallback .. ###")
 
