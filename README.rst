@@ -29,7 +29,7 @@ Discovery with scope, replace the parameters to match your environment and run t
 
 Discovery only, replace the parameters to match your environment and run this command ::
 
-    python al_ci_aws_cross_setup.py --user first.last@company.com --pswd MyCloudInsightPassword --cid 10000 --aws 052672429986 --arn arn:aws:iam::052672429986:role/AlertLogicCrossAccountCI --ext My_ext_id --cred TestArgCred --env TestEnv
+    python al_ci_aws_cross_setup.py DISC --user first.last@company.com --pswd MyCloudInsightPassword --cid 10000 --aws 052672429986 --arn arn:aws:iam::052672429986:role/AlertLogicCrossAccountCI --ext My_ext_id --cred TestArgCred --env TestEnv
 
 Take note of the output from the script, you will need to record the Environment ID if you wish to delete it later using this script (see below)
 
