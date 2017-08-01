@@ -237,42 +237,51 @@ def get_launcher_data(token, target_env, target_cid):
 		
 	return RESULT
 
-def launcher_wait_state(token, target_env, target_cid):
+def launcher_wait_state(token, target_env, target_cid,mode):
 	#Wait for launcher to be fully deployed
 	print ("\n### Check Launcher Status ###")
 	
 	while True:
-		#Get Launcher Status and check for each region / VPC
-		LAUNCHER_RESULT = get_launcher_status(token, target_env, target_cid)
-		if LAUNCHER_RESULT["scope"] != "n/a":
-			LAUNCHER_FLAG = True
+		if mode == "ADD" or mode == "DISC":			
+			#Get Launcher Status and check for each region / VPC
+			LAUNCHER_RESULT = get_launcher_status(token, target_env, target_cid)
+			if LAUNCHER_RESULT["scope"] != "n/a":
+				LAUNCHER_FLAG = True
 
-			for LAUNCHER_REGION in LAUNCHER_RESULT["scope"]:
-				print ("Region : " + str(LAUNCHER_REGION["key"])  + " status : " + str(LAUNCHER_REGION["protection_state"]) )
-				if LAUNCHER_REGION["protection_state"] != "completed":
-					LAUNCHER_FLAG = False
+				for LAUNCHER_REGION in LAUNCHER_RESULT["scope"]:
+					print ("Region : " + str(LAUNCHER_REGION["key"])  + " status : " + str(LAUNCHER_REGION["protection_state"]) )
+					if LAUNCHER_REGION["protection_state"] != "completed" and LAUNCHER_REGION["protection_state"] != "removed":
+						LAUNCHER_FLAG = False
+				
+				if LAUNCHER_FLAG == True:				
+					print ("\n### Launcher Completed Successfully ###")
+					LAUNCHER_RETRY = 5
+
+					while LAUNCHER_RETRY > 0:									
+						LAUNCHER_DATA = get_launcher_data(token, target_env, target_cid)
+						if LAUNCHER_DATA["environment_id"] != "n/a":
+							print ("\n### Successfully retrieve Launcher data ###")
+							for LAUNCHER_VPC in LAUNCHER_DATA["vpcs"]:
+								print ("Region: " + str(LAUNCHER_VPC["region"]))
+								print ("VPC: " + str(LAUNCHER_VPC["vpc_key"]))
+								print ("SG: " + str(LAUNCHER_VPC["security_group"]["resource_id"]))
+								print ("\n")
+							LAUNCHER_RETRY = 0
+						else:
+							print ("\n### Failed to retrieve Launcher Data, see response code + reason above, retrying in 10 seconds ###")
+							time.sleep(10)
+							LAUNCHER_RETRY = LAUNCHER_RETRY -1
+					
+					break
+
+		elif mode == "DEL":
+			#Get Launcher Status 
+			LAUNCHER_RESULT = get_launcher_status(token, target_env, target_cid)
+
+			if LAUNCHER_RESULT["scope"] == "n/a":
+				print ("\n### Launcher Deleted Successfully ###")
+				break;
 			
-			if LAUNCHER_FLAG == True:								
-				print ("\n### Launcher Completed Successfully ###")
-				LAUNCHER_RETRY = 5
-
-				while LAUNCHER_RETRY > 0:									
-					LAUNCHER_DATA = get_launcher_data(token, target_env, target_cid)
-					if LAUNCHER_DATA["environment_id"] != "n/a":
-						print ("\n### Successfully retrieve Launcher data ###")
-						for LAUNCHER_VPC in LAUNCHER_DATA["vpcs"]:
-							print ("Region: " + str(LAUNCHER_VPC["region"]))
-							print ("VPC: " + str(LAUNCHER_VPC["vpc_key"]))
-							print ("SG: " + str(LAUNCHER_VPC["security_group"]["resource_id"]))
-							print ("\n")
-						LAUNCHER_RETRY = 0
-					else:
-						print ("\n### Failed to retrieve Launcher Data, see response code + reason above, retrying in 10 seconds ###")
-						time.sleep(10)
-						LAUNCHER_RETRY = LAUNCHER_RETRY -1
-
-				break
-
 		#Sleep for 10 seconds
 		time.sleep(10)
 
@@ -400,7 +409,7 @@ if __name__ == '__main__':
 				#If Scope included, do LAuncher check
 				if args.scope and VALID_SCOPE:										
 					#Check and wait until launcher completed
-					launcher_wait_state(TOKEN, ENV_ID, TARGET_CID)
+					launcher_wait_state(TOKEN, ENV_ID, TARGET_CID, args.mode)
 				else:
 					print ("\n### No scope defined, skipping Launcher Status ###")
 
@@ -434,8 +443,10 @@ if __name__ == '__main__':
 					
 					#Build new payload based on original source + new scope
 					ENV_PAYLOAD = SOURCE_RESULT
-					del ENV_PAYLOAD["source"]["created"]
-					del ENV_PAYLOAD["source"]["modified"]
+
+					#clean up fiedls that is not required
+					if ENV_PAYLOAD["source"].has_key("created"): del ENV_PAYLOAD["source"]["created"]
+					if ENV_PAYLOAD["source"].has_key("modified"): del ENV_PAYLOAD["source"]["modified"]
 					ENV_PAYLOAD["source"]["config"]["aws"]["scope"] = INPUT_SCOPE
 					
 					#Update the source environment based on env ID and new payload
@@ -447,7 +458,7 @@ if __name__ == '__main__':
 						print ("\n### Cloud Insight Environment updated successfully ###")
 
 						#Check and wait until launcher completed
-						launcher_wait_state(TOKEN, ENV_ID, TARGET_CID)
+						launcher_wait_state(TOKEN, ENV_ID, TARGET_CID, args.mode)
 						
 					else:
 						print ("### Failed to update environment scope, see response code + reason above, starting fallback .. ###")
@@ -472,8 +483,13 @@ if __name__ == '__main__':
 			print ("Env ID : " + TARGET_ENV_ID)
 			print ("Credential ID : " + TARGET_CRED_ID)
 
-			#Delete the environment and credentials associated with that environment
+			#Delete the environment 
 			del_source_environment(TOKEN, TARGET_ENV_ID, TARGET_CID)
+
+			#Check and wait until launcher completed
+			launcher_wait_state(TOKEN, TARGET_ENV_ID, TARGET_CID, args.mode)
+
+			#Delete the credentials associated with that environment
 			del_source_credentials(TOKEN, TARGET_CRED_ID, TARGET_CID)
 
 		else:
