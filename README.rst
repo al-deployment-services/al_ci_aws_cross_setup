@@ -20,7 +20,7 @@ Deployment Mode
 * ADD = update existing Cloud Insight environment with new scope (replace)
 * DEL = delete the existing Cloud Insight environment
 * APD = append scope to existing environment 
-* rMV = remove scope from existing environment 
+* RMV = remove scope from existing environment 
 
 
 Sample Usage - Discovery
@@ -66,7 +66,7 @@ Remove scope from existing environment, replace the parameters to match your env
 
 Take note of the output from the script, you will need to record the Environment ID if you wish to delete it later using this script (see below).
 
-VPC or region in the input scope will be removed from the environment. 
+VPC or region in the input scope will be removed from the environment. If the final scope is empty, the environment will stay running until you explicitly delete it.
 
 
 Sample Usage - Delete
