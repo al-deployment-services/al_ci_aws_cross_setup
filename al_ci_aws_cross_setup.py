@@ -495,6 +495,7 @@ if __name__ == '__main__':
 			VALID_SCOPE = False
 
 		#Handling missing scope
+		NO_LAUNCHER = False
 		if VALID_SCOPE == False and args.mode == "DISC":
 			print ("\n### Deployment will continue with empty scope ###")
 
@@ -503,7 +504,8 @@ if __name__ == '__main__':
 			INPUT_SCOPE["include"] = []
 			INPUT_SCOPE["exclude"] = []
 			VALID_SCOPE = True
-
+			NO_LAUNCHER = True
+		
 		elif VALID_SCOPE == False:
 			print ("\n### Cannot continue deployment without valid scope ###")
 
@@ -622,7 +624,7 @@ if __name__ == '__main__':
 				print ("\n### Cloud Insight Environment created successfully ###")
 
 				#If Scope included, do LAuncher check
-				if args.scope and VALID_SCOPE:										
+				if args.scope and NO_LAUNCHER == False:										
 					#Check and wait until launcher completed
 					launcher_wait_state(TOKEN, ENV_ID, TARGET_CID, args.mode)
 				else:
