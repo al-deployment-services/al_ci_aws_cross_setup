@@ -17,8 +17,10 @@ Requirements
 Deployment Mode
 ---------------
 * DISC = launch Cloud Insight with or without scope, initiate AWS environment discovery
-* ADD = update existing Cloud Insight environment with new scope
+* ADD = update existing Cloud Insight environment with new scope (replace)
 * DEL = delete the existing Cloud Insight environment
+* APD = append scope to existing environment 
+* rMV = remove scope from existing environment 
 
 
 Sample Usage - Discovery
@@ -33,15 +35,38 @@ Discovery only, replace the parameters to match your environment and run this co
 
 Take note of the output from the script, you will need to record the Environment ID if you wish to delete it later using this script (see below)
 
+
 Sample Usage - Add
 ------------------
-Add scope to existing environment, replace the parameters to match your environment and run this command ::
+Add / replace scope of existing environment, replace the parameters to match your environment and run this command ::
 
     python al_ci_aws_cross_setup.py ADD --user first.last@company.com --pswd MyCloudInsightPassword --cid 10000 --envid 89C90B43-7C50-4766-8ECD-37F9B9CD150B --scope input.json
 
 Take note of the output from the script, you will need to record the Environment ID if you wish to delete it later using this script (see below).
 
-If you add new VPC into the scope, then a new Cloud Insight scanner will be launched on the target VPC. If you remove VPC from the scope, then the Cloud Insight scanner on that VPC will be removed.
+The input scope will be used as the final scope (replacing the existing scope). If you add new VPC into the scope, then a new Cloud Insight scanner will be launched on the target VPC. If you remove VPC from the scope, then the Cloud Insight scanner on that VPC will be removed.
+
+
+Sample Usage - Append
+---------------------
+Append to existing environment scope, replace the parameters to match your environment and run this command ::
+
+    python al_ci_aws_cross_setup.py APD --user first.last@company.com --pswd MyCloudInsightPassword --cid 10000 --envid 89C90B43-7C50-4766-8ECD-37F9B9CD150B --scope input.json
+
+Take note of the output from the script, you will need to record the Environment ID if you wish to delete it later using this script (see below).
+
+The input scope will be appened to existing environment. The VPC or region in the existing scope will not be touched / modified.
+
+
+Sample Usage - Remove
+---------------------
+Remove scope from existing environment, replace the parameters to match your environment and run this command ::
+
+    python al_ci_aws_cross_setup.py RMV --user first.last@company.com --pswd MyCloudInsightPassword --cid 10000 --envid 89C90B43-7C50-4766-8ECD-37F9B9CD150B --scope input.json
+
+Take note of the output from the script, you will need to record the Environment ID if you wish to delete it later using this script (see below).
+
+VPC or region in the input scope will be removed from the environment. 
 
 
 Sample Usage - Delete
