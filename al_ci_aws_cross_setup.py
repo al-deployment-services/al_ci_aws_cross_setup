@@ -240,7 +240,9 @@ def get_launcher_data(token, target_env, target_cid):
 def launcher_wait_state(token, target_env, target_cid,mode):
 	#Wait for launcher to be fully deployed
 	print ("\n### Check Launcher Status ###")
-	
+
+	#give sufficient time for backend to update Launcher status
+	time.sleep(10)
 	while True:
 		if mode == "ADD" or mode == "DISC" or mode =="APD" or mode =="RMV":			
 			#Get Launcher Status and check for each region / VPC
@@ -505,7 +507,7 @@ if __name__ == '__main__':
 			INPUT_SCOPE["exclude"] = []
 			VALID_SCOPE = True
 			NO_LAUNCHER = True
-		
+
 		elif VALID_SCOPE == False:
 			print ("\n### Cannot continue deployment without valid scope ###")
 
@@ -563,9 +565,19 @@ if __name__ == '__main__':
 					#For Append mode, add the new scope to the existing scope
 					#For Remove mode, subtract the new scope from existing scope
 					elif args.mode =="APD" or args.mode == "RMV":
+
 						#Check if the existing environment has scope included
 						if SOURCE_RESULT["source"]["config"]["aws"].has_key("scope"):
-							
+							#verify if the scope if empty
+							if SOURCE_RESULT["source"]["config"]["aws"]["scope"]:
+								EXISTING_SCOPE = True
+							else:
+								#to accomodate issue where environment has been de-scoped from the UI with artifact key: scope still exist in the Source
+								EXISTING_SCOPE = False
+						else:
+							EXISTING_SCOPE = False
+
+						if EXISTING_SCOPE == True:
 							if args.mode =="APD":
 								#rebuild the included scope by appending original + new scope and find all unique regions and vpcs
 								REBUILD_INCLUDE_SCOPE = append_scope(SOURCE_RESULT["source"]["config"]["aws"]["scope"]["include"], INPUT_SCOPE["include"], "include")
