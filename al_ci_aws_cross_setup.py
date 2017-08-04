@@ -16,6 +16,13 @@ YARP_URL="api.cloudinsight.alertlogic.com"
 ALERT_LOGIC_CI_SOURCE = "https://api.cloudinsight.alertlogic.com/sources/v1/"
 ALERT_LOGIC_CI_LAUNCHER = "https://api.cloudinsight.alertlogic.com/launcher/v1/"
 
+#exit code standard:
+#0 = OK
+#1 = argument parser issue
+#2 = environment issue such as invalid environment id, invalid password, or invalid scope
+#3 = timeout
+EXIT_CODE = 0
+
 # Using jsonschema Python library. (http://json-schema.org)
 # Schema for scope in Cloud Insight source
 schema = {
@@ -237,13 +244,16 @@ def get_launcher_data(token, target_env, target_cid):
 		
 	return RESULT
 
-def launcher_wait_state(token, target_env, target_cid,mode):
+def launcher_wait_state(token, target_env, target_cid,mode, timeout):
 	#Wait for launcher to be fully deployed
+	global EXIT_CODE
+	TIMEOUT_COUNTER=10
+	
 	print ("\n### Check Launcher Status ###")
 
 	#give sufficient time for backend to update Launcher status
 	time.sleep(10)
-	while True:
+	while True:		
 		if mode == "ADD" or mode == "DISC" or mode =="APD" or mode =="RMV":			
 			#Get Launcher Status and check for each region / VPC
 			LAUNCHER_RESULT = get_launcher_status(token, target_env, target_cid)
@@ -273,7 +283,8 @@ def launcher_wait_state(token, target_env, target_cid,mode):
 							print ("\n### Failed to retrieve Launcher Data, see response code + reason above, retrying in 10 seconds ###")
 							time.sleep(10)
 							LAUNCHER_RETRY = LAUNCHER_RETRY -1
-					
+							if LAUNCHER_RETRY <= 0: EXIT_CODE=3
+										
 					break
 
 		elif mode == "DEL":
@@ -285,7 +296,14 @@ def launcher_wait_state(token, target_env, target_cid,mode):
 				break;
 
 		#Sleep for 10 seconds
-		time.sleep(10)
+		timeout = timeout - TIMEOUT_COUNTER
+		if timeout < 0:
+			print ("\n### Script timeout exceeded ###")
+			EXIT_CODE=3
+			break;
+
+		time.sleep(TIMEOUT_COUNTER)
+		
 
 def change_scope_to_list(input_scope, scope_type):
 	temp_list = []
@@ -387,7 +405,10 @@ def failback(token, cred_id, target_cid):
 
 #MAIN MODULE
 if __name__ == '__main__':
-	
+	EXIT_CODE=0
+	#Default timeout set to 600 seconds
+	SCRIPT_TIMEOUT = 600
+
 	#Prepare parser and argument
 	parent_parser = argparse.ArgumentParser()
 	subparsers = parent_parser.add_subparsers(help="Select mode", dest="mode")
@@ -409,6 +430,7 @@ if __name__ == '__main__':
 	dis_parser.add_argument("--cred", required=True, help="Credential name, free form label, not visible in Alert Logic UI")
 	dis_parser.add_argument("--env", required=True, help="Environment name, will be displayed in Alert Logic UI under Deployment")
 	dis_parser.add_argument("--scope", required=False, help="Optional path to JSON file with the region / scope scope detail")
+	dis_parser.add_argument("--time", required=False, help="Time out in second for this script to run")
 
 	#Parser argument for Add scope
 	add_parser.add_argument("--user", required=True, help="User name / email address for API Authentication")
@@ -416,12 +438,14 @@ if __name__ == '__main__':
 	add_parser.add_argument("--cid", required=True, help="Alert Logic Customer CID as target for adding scope")
 	add_parser.add_argument("--envid", required=True, help="Cloud Insight Environment ID as target for this scope")
 	add_parser.add_argument("--scope", required=True, help="Path to JSON file with the region / scope scope detail")
+	add_parser.add_argument("--time", required=False, help="Time out in second for this script to run")
 
 	#Parser argument for Delete environment
 	del_parser.add_argument("--user", required=True, help="User name / email address for API Authentication")
 	del_parser.add_argument("--pswd", required=True, help="Password for API Authentication")
 	del_parser.add_argument("--cid", required=True, help="Alert Logic Customer CID as target for removal")
 	del_parser.add_argument("--envid", required=True, help="Cloud Insight Environment ID as target for removal")
+	del_parser.add_argument("--time", required=False, help="Time out in second for this script to run")
 
 	#Parser argument for Append scope
 	apd_parser.add_argument("--user", required=True, help="User name / email address for API Authentication")
@@ -429,6 +453,7 @@ if __name__ == '__main__':
 	apd_parser.add_argument("--cid", required=True, help="Alert Logic Customer CID as target for adding scope")
 	apd_parser.add_argument("--envid", required=True, help="Cloud Insight Environment ID as target for this scope")
 	apd_parser.add_argument("--scope", required=True, help="Path to JSON file with the region / scope scope detail")
+	apd_parser.add_argument("--time", required=False, help="Time out in second for this script to run")
 
 	#Parser argument for Remove scope
 	rmv_parser.add_argument("--user", required=True, help="User name / email address for API Authentication")
@@ -436,9 +461,14 @@ if __name__ == '__main__':
 	rmv_parser.add_argument("--cid", required=True, help="Alert Logic Customer CID as target for adding scope")
 	rmv_parser.add_argument("--envid", required=True, help="Cloud Insight Environment ID as target for this scope")
 	rmv_parser.add_argument("--scope", required=True, help="Path to JSON file with the region / scope scope detail")
+	rmv_parser.add_argument("--time", required=False, help="Time out in second for this script to run")
 	
-	args = parent_parser.parse_args()
-	
+	try:
+		args = parent_parser.parse_args()
+	except:
+		EXIT_CODE = 1
+		sys.exit(EXIT_CODE)
+		
 	#Set argument to variables
 	if args.mode == "DISC":	
 		EMAIL_ADDRESS = args.user 
@@ -464,12 +494,20 @@ if __name__ == '__main__':
 		TARGET_CID = args.cid	
 		TARGET_ENV_ID = args.envid
 	
+	if args.time:
+		SCRIPT_TIMEOUT=int(args.time)
+
 	if args.mode =="DISC" or args.mode == "ADD" or args.mode =="APD" or args.mode =="RMV":
 		print ("### Starting script - " + str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")) + " - Deployment Mode = " + str(args.mode) + " ###\n")
 
 		#Authenticate with Cloud Insight and retrieve token	
-		TOKEN = str(authenticate(EMAIL_ADDRESS, PASSWORD, YARP_URL))
-		
+		try:
+			TOKEN = str(authenticate(EMAIL_ADDRESS, PASSWORD, YARP_URL))
+		except:
+			print ("### Cannot Authenticate - check user name or password ###\n")
+			EXIT_CODE = 2
+			sys.exit(EXIT_CODE)
+				
 		#Check if scope provided 
 		VALID_SCOPE = True
 		if args.scope:
@@ -627,7 +665,7 @@ if __name__ == '__main__':
 					ENV_RESULT = put_source_environment(TOKEN, str(json.dumps(ENV_PAYLOAD, indent=4)), TARGET_CID, TARGET_ENV_ID)
 					ENV_ID = str(ENV_RESULT['source']['id'])
 														
-				else:
+				else:					
 					print ("Failed to find the environment ID, see response code + reason above, stopping ..")
 		
 			#Check if environment created / updated properly
@@ -638,7 +676,7 @@ if __name__ == '__main__':
 				#If Scope included, do LAuncher check
 				if args.scope and NO_LAUNCHER == False:										
 					#Check and wait until launcher completed
-					launcher_wait_state(TOKEN, ENV_ID, TARGET_CID, args.mode)
+					launcher_wait_state(TOKEN, ENV_ID, TARGET_CID, args.mode, SCRIPT_TIMEOUT)
 				else:
 					print ("\n### No scope defined, skipping Launcher Status ###")
 
@@ -646,17 +684,24 @@ if __name__ == '__main__':
 				print ("### Failed to create / update environment source, see response code + reason above, starting fallback .. ###")
 				if args.mode == "DISC":
 					failback(TOKEN, CRED_ID, TARGET_CID)
+				EXIT_CODE = 2
 
-		else:
+		else:			
 			print ("\n### Terminating Script ###")
+			EXIT_CODE = 2
 
 				
 	elif args.mode == "DEL":
 
 		print ("### Starting script - " + str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")) + " - Deployment Mode = Delete ###\n")
 
-		#Authenticate with Cloud Insight and retrieve token	
-		TOKEN = str(authenticate(EMAIL_ADDRESS, PASSWORD, YARP_URL))
+		#Authenticate with Cloud Insight and retrieve token			
+		try:
+			TOKEN = str(authenticate(EMAIL_ADDRESS, PASSWORD, YARP_URL))
+		except:
+			print ("### Cannot Authenticate - check user name or password ###\n")
+			EXIT_CODE = 2
+			sys.exit(EXIT_CODE)
 
 		#Check if the provided Environment ID exist and valid
 		SOURCE_RESULT = get_source_environment(TOKEN, TARGET_ENV_ID, TARGET_CID)
@@ -670,13 +715,16 @@ if __name__ == '__main__':
 			del_source_environment(TOKEN, TARGET_ENV_ID, TARGET_CID)
 
 			#Check and wait until launcher completed
-			launcher_wait_state(TOKEN, TARGET_ENV_ID, TARGET_CID, args.mode)
+			launcher_wait_state(TOKEN, TARGET_ENV_ID, TARGET_CID, args.mode, SCRIPT_TIMEOUT)
 
 			#Delete the credentials associated with that environment
 			del_source_credentials(TOKEN, TARGET_CRED_ID, TARGET_CID)
 
 		else:
+			EXIT_CODE=2
 			print ("Failed to find the environment ID, see response code + reason above, stopping ..")
 
 	
-	print ("\n### Script stopped - " + str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")) + "###\n")	
+	print ("\n### Script stopped - " + str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")) + "###\n")
+	sys.exit(EXIT_CODE)
+

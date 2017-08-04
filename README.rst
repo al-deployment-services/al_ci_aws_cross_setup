@@ -88,9 +88,20 @@ Arguments
   --cred CRED  Credential name, free form label, not visible in Alert Logic UI
   --env ENV    Environment name, will be displayed in Alert Logic UI under Deployment
   --scope      json formated file with the VPC scope details
+  --time       time out in second for this script to run
 
 The input.json file sample can be found inside this repository, more details about the schema can be found in here:
 * https://console.cloudinsight.alertlogic.com/api/sources/#api-JSON_Formats-AWSEnvironmentSourceJSONFormat
+
+Exit Code
+----------
+If you going to integrate this script to another orchestration tool, you can use the exit code to detect the status:
+  0   script run successfully
+  1   missing or invalid argument
+  2   environment issue such as invalid environment id, invalid password, or invalid scope
+  3   timeout 
+
+WARNING: This script will not revert back any changes due to timeout, any commands / API calls that it executed prior to timeout will run until completed, even if the script exit due to timeout.
 
 License and Authors
 ===================
