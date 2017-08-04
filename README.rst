@@ -96,10 +96,11 @@ The input.json file sample can be found inside this repository, more details abo
 Exit Code
 ----------
 If you going to integrate this script to another orchestration tool, you can use the exit code to detect the status:
-  0   script run successfully
-  1   missing or invalid argument
-  2   environment issue such as invalid environment id, invalid password, or invalid scope
-  3   timeout 
+
+* 0 = script run successfully
+* 1 = missing or invalid argument
+* 2 = environment issue such as invalid environment id, invalid password, or invalid scope
+* 3 = timeout 
 
 WARNING: This script will not revert back any changes due to timeout, any commands / API calls that it executed prior to timeout will run until completed, even if the script exit due to timeout.
 
