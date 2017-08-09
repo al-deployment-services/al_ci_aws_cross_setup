@@ -3,7 +3,7 @@
 # Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License.
 
 from __future__ import print_function
-import json, requests, datetime, sys, argparse, time
+import json, requests, datetime, sys, argparse, time, copy
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 import jsonschema
 from jsonschema import validate
@@ -244,6 +244,26 @@ def get_launcher_data(token, target_env, target_cid):
 		
 	return RESULT
 
+def launcher_filter_output(token, target_env, target_cid, mode, scope_filter):	
+	print ("\n### Filter output, show only changes to environment - mode : " + str(mode) + " ###")
+
+	#grab launcher data	
+	LAUNCHER_RESULT = get_launcher_status(token, target_env, target_cid)
+	if LAUNCHER_RESULT["scope"] != "n/a":		
+		LAUNCHER_DATA = get_launcher_data(token, target_env, target_cid)
+		if LAUNCHER_DATA["environment_id"] != "n/a":
+			#if the new scope is not empty, retrieve the launcher info for resource that changes (added or removed)
+			if scope_filter:
+				for LAUNCHER_VPC in LAUNCHER_DATA["vpcs"]:
+					for vpc in scope_filter:
+						if vpc == LAUNCHER_VPC["vpc_key"]:
+							print ("Change_Region: " + str(LAUNCHER_VPC["region"]))
+							print ("Change_VPC: " + str(LAUNCHER_VPC["vpc_key"]))
+							print ("Change_SG: " + str(LAUNCHER_VPC["security_group"]["resource_id"]))
+							print ("\n")
+
+	print ("### End Filter Output ###\n")
+
 def launcher_wait_state(token, target_env, target_cid,mode, timeout):
 	#Wait for launcher to be fully deployed
 	global EXIT_CODE
@@ -272,12 +292,14 @@ def launcher_wait_state(token, target_env, target_cid,mode, timeout):
 					while LAUNCHER_RETRY > 0:									
 						LAUNCHER_DATA = get_launcher_data(token, target_env, target_cid)
 						if LAUNCHER_DATA["environment_id"] != "n/a":
+							
 							print ("\n### Successfully retrieve Launcher data ###")
 							for LAUNCHER_VPC in LAUNCHER_DATA["vpcs"]:
 								print ("Region: " + str(LAUNCHER_VPC["region"]))
 								print ("VPC: " + str(LAUNCHER_VPC["vpc_key"]))
 								print ("SG: " + str(LAUNCHER_VPC["security_group"]["resource_id"]))
 								print ("\n")
+
 							LAUNCHER_RETRY = 0
 						else:
 							print ("\n### Failed to retrieve Launcher Data, see response code + reason above, retrying in 10 seconds ###")
@@ -314,6 +336,20 @@ def change_scope_to_list(input_scope, scope_type):
 
 	return temp_list
 
+def filter_scope(source_scope, new_scope, scope_type, mode):
+
+	source_scope = change_scope_to_list(source_scope, scope_type)
+	new_scope = change_scope_to_list(new_scope, scope_type)
+	
+	#find the resultant changes
+	if mode == "APD" or mode == "DISC":
+		difference_scope = set(new_scope) - set(source_scope)		
+
+	elif mode == "RMV":		
+		difference_scope = set(source_scope) - (set(source_scope) - set(new_scope))
+		
+	return difference_scope
+
 def append_scope(source_scope, new_scope, scope_limit):
 
 	#transform Dictionary to List
@@ -323,7 +359,7 @@ def append_scope(source_scope, new_scope, scope_limit):
 	#build set for VPC scope by combining existing and new VPC
 	final_vpc_scope = original_vpc_scope + new_vpc_scope
 	final_vpc_scope = set(final_vpc_scope)
-
+	
 	#transform Dictionary to List
 	original_region_scope = change_scope_to_list(source_scope, "region")
 	new_region_scope = change_scope_to_list(new_scope, "region")
@@ -361,7 +397,7 @@ def remove_scope(source_scope, new_scope, scope_limit):
 	#transform to Set to make it easier to subtract
 	original_vpc_scope = set(original_vpc_scope)
 	new_vpc_scope = set(new_vpc_scope)
-	
+		
 	#substract the scope that will be removed
 	final_vpc_scope = original_vpc_scope - new_vpc_scope
 	
@@ -431,6 +467,7 @@ if __name__ == '__main__':
 	dis_parser.add_argument("--env", required=True, help="Environment name, will be displayed in Alert Logic UI under Deployment")
 	dis_parser.add_argument("--scope", required=False, help="Optional path to JSON file with the region / scope scope detail")
 	dis_parser.add_argument("--time", required=False, help="Time out in second for this script to run")
+	dis_parser.add_argument("--filter", required=False, help="Filter the output to only show the new changes", default=False, action='store_true')
 
 	#Parser argument for Add scope
 	add_parser.add_argument("--user", required=True, help="User name / email address for API Authentication")
@@ -439,6 +476,7 @@ if __name__ == '__main__':
 	add_parser.add_argument("--envid", required=True, help="Cloud Insight Environment ID as target for this scope")
 	add_parser.add_argument("--scope", required=True, help="Path to JSON file with the region / scope scope detail")
 	add_parser.add_argument("--time", required=False, help="Time out in second for this script to run")
+	add_parser.add_argument("--filter", required=False, help="Filter the output to only show the new changes", default=False, action='store_true')
 
 	#Parser argument for Delete environment
 	del_parser.add_argument("--user", required=True, help="User name / email address for API Authentication")
@@ -446,6 +484,7 @@ if __name__ == '__main__':
 	del_parser.add_argument("--cid", required=True, help="Alert Logic Customer CID as target for removal")
 	del_parser.add_argument("--envid", required=True, help="Cloud Insight Environment ID as target for removal")
 	del_parser.add_argument("--time", required=False, help="Time out in second for this script to run")
+	del_parser.add_argument("--filter", required=False, help="Filter the output to only show the new changes", default=False, action='store_true')
 
 	#Parser argument for Append scope
 	apd_parser.add_argument("--user", required=True, help="User name / email address for API Authentication")
@@ -454,6 +493,7 @@ if __name__ == '__main__':
 	apd_parser.add_argument("--envid", required=True, help="Cloud Insight Environment ID as target for this scope")
 	apd_parser.add_argument("--scope", required=True, help="Path to JSON file with the region / scope scope detail")
 	apd_parser.add_argument("--time", required=False, help="Time out in second for this script to run")
+	apd_parser.add_argument("--filter", required=False, help="Filter the output to only show the new changes", default=False, action='store_true')
 
 	#Parser argument for Remove scope
 	rmv_parser.add_argument("--user", required=True, help="User name / email address for API Authentication")
@@ -462,13 +502,16 @@ if __name__ == '__main__':
 	rmv_parser.add_argument("--envid", required=True, help="Cloud Insight Environment ID as target for this scope")
 	rmv_parser.add_argument("--scope", required=True, help="Path to JSON file with the region / scope scope detail")
 	rmv_parser.add_argument("--time", required=False, help="Time out in second for this script to run")
+	rmv_parser.add_argument("--filter", required=False, help="Filter the output to only show the new changes", default=False, action='store_true')
 	
 	try:
 		args = parent_parser.parse_args()
 	except:
 		EXIT_CODE = 1
 		sys.exit(EXIT_CODE)
-		
+	
+	TARGET_FILTER = False
+
 	#Set argument to variables
 	if args.mode == "DISC":	
 		EMAIL_ADDRESS = args.user 
@@ -480,20 +523,24 @@ if __name__ == '__main__':
 		TARGET_CRED_NAME = args.cred
 		TARGET_ENV_NAME = args.env
 		TARGET_SCOPE = args.scope
-
+		
 	elif args.mode == "ADD" or args.mode == "APD" or args.mode == "RMV":
 		EMAIL_ADDRESS = args.user
 		PASSWORD = args.pswd
 		TARGET_CID = args.cid	
 		TARGET_ENV_ID = args.envid
-		TARGET_SCOPE = args.scope
+		TARGET_SCOPE = args.scope		
 
 	elif args.mode == "DEL":
 		EMAIL_ADDRESS = args.user
 		PASSWORD = args.pswd
 		TARGET_CID = args.cid	
-		TARGET_ENV_ID = args.envid
+		TARGET_ENV_ID = args.envid		
 	
+	#Initialize output filter
+	TARGET_FILTER = args.filter
+	SCOPE_DIFFERENCE = []
+
 	if args.time:
 		SCRIPT_TIMEOUT=int(args.time)
 
@@ -552,7 +599,6 @@ if __name__ == '__main__':
 		#Check pre-requisite
 		VALID_PREREQ = True		
 		if VALID_SCOPE == True:
-
 			#Discovery mode will require new credentials before we can proceed
 			if args.mode == "DISC":
 				#Create credentials using the IAM role ARN and external ID	
@@ -582,6 +628,15 @@ if __name__ == '__main__':
 				ENV_RESULT = post_source_environment(TOKEN, str(json.dumps(ENV_PAYLOAD, indent=4)), TARGET_CID)
 				ENV_ID = str(ENV_RESULT['source']['id'])
 
+				#if Output filter is set, get the resultant scope
+				if TARGET_FILTER == True:
+					#create dummy source to calculate the resultant output
+					DUMMY_SOURCE = {}
+					DUMMY_SOURCE["include"] = []
+					DUMMY_SOURCE["exclude"] = []
+
+					SCOPE_DIFFERENCE = filter_scope(DUMMY_SOURCE["include"], INPUT_SCOPE["include"], "vpc", args.mode)
+
 			elif args.mode == "ADD" or args.mode == "APD" or args.mode =="RMV":
 
 				#Check if the provided Environment ID exist and valid
@@ -590,7 +645,7 @@ if __name__ == '__main__':
 				if SOURCE_RESULT["source"]["id"] != "n/a":
 					
 					#Build new payload based on original source + new scope
-					ENV_PAYLOAD = SOURCE_RESULT
+					ENV_PAYLOAD = copy.deepcopy(SOURCE_RESULT)
 
 					#clean up fiedls that is not required
 					if ENV_PAYLOAD["source"].has_key("created"): del ENV_PAYLOAD["source"]["created"]
@@ -615,6 +670,7 @@ if __name__ == '__main__':
 						else:
 							EXISTING_SCOPE = False
 
+
 						if EXISTING_SCOPE == True:
 							if args.mode =="APD":
 								#rebuild the included scope by appending original + new scope and find all unique regions and vpcs
@@ -629,42 +685,66 @@ if __name__ == '__main__':
 
 								#rebuild the excluded scope by subtract original with new scope and find all unique regions and vpcs
 								REBUILD_EXCLUDE_SCOPE = remove_scope(SOURCE_RESULT["source"]["config"]["aws"]["scope"]["exclude"], INPUT_SCOPE["exclude"], "exclude")
-
-							print ("\nOriginal Scope:")						
-							print (json.dumps(SOURCE_RESULT["source"]["config"]["aws"]["scope"], indent=4))
 							
 							#merge both include and excluded scope and prepare the new payload
 							REBUILD_FINAL_SCOPE = {}
 							REBUILD_FINAL_SCOPE.update(REBUILD_INCLUDE_SCOPE)
 							REBUILD_FINAL_SCOPE.update(REBUILD_EXCLUDE_SCOPE)
+
+							print ("\nOriginal Scope:")						
+							print (json.dumps(SOURCE_RESULT["source"]["config"]["aws"]["scope"], indent=4))
+
 							print ("\nFinal Scope:")
 							print (json.dumps(REBUILD_FINAL_SCOPE,indent=4))
-														
+													
 							#set the new payload scope
 							ENV_PAYLOAD["source"]["config"]["aws"]["scope"] = REBUILD_FINAL_SCOPE
 
 						else:
+							
 							if args.mode == "APD":
 								#create the first scope, very similar to ADD function
 								ENV_PAYLOAD["source"]["config"]["aws"]["scope"] = INPUT_SCOPE
 
 							elif args.mode == "RMV":
 								#if the existing environment doesnt have scope, then keep the existing setup and put blank scope
-								#Prepare empty scope for discovery
+								#Prepare empty scope
 								INPUT_SCOPE = {}
 								INPUT_SCOPE["include"] = []
 								INPUT_SCOPE["exclude"] = []
 								ENV_PAYLOAD["source"]["config"]["aws"]["scope"] = INPUT_SCOPE
-										
+
+							print ("\nOriginal Scope:")
+							print ("-- original scope is empty --")
+							
+							print ("\nFinal Scope:")
+							print (json.dumps(INPUT_SCOPE,indent=4))
+														
 					#Check if the append / remove may cause the included scope to be empty
 					#PUT with empty scope will cause error 404
 					if not ENV_PAYLOAD["source"]["config"]["aws"]["scope"]["include"]:
 						del ENV_PAYLOAD["source"]["config"]["aws"]["scope"]
+					
+					#Check if filter enabled and find the resultant output after changes applied (ADD / APD / RMV)
+					if TARGET_FILTER == True:
+						if EXISTING_SCOPE == True:
+							SCOPE_DIFFERENCE = filter_scope(SOURCE_RESULT["source"]["config"]["aws"]["scope"]["include"], INPUT_SCOPE["include"], "vpc", args.mode)
+						else:
+							#create dummy source to calculate the resultant scope
+							DUMMY_SOURCE = {}
+							DUMMY_SOURCE["include"] = []
+							DUMMY_SOURCE["exclude"] = []
+							SCOPE_DIFFERENCE = filter_scope(DUMMY_SOURCE["include"], INPUT_SCOPE["include"], "vpc", args.mode)
+						
+						#If mode = remove, display the changes before we delete it, otherwise we lose the aws resource info
+						#for other mode (add, apd, disc) wait until the launcher is set before take the filter output
+						if args.mode == "RMV":
+							launcher_filter_output(TOKEN, TARGET_ENV_ID, TARGET_CID, args.mode, SCOPE_DIFFERENCE)
 
 					#Update the source environment based on env ID and new payload
 					ENV_RESULT = put_source_environment(TOKEN, str(json.dumps(ENV_PAYLOAD, indent=4)), TARGET_CID, TARGET_ENV_ID)
 					ENV_ID = str(ENV_RESULT['source']['id'])
-														
+																		
 				else:					
 					print ("Failed to find the environment ID, see response code + reason above, stopping ..")
 		
@@ -674,9 +754,16 @@ if __name__ == '__main__':
 				print ("\n### Cloud Insight Environment created successfully ###")
 
 				#If Scope included, do LAuncher check
-				if args.scope and NO_LAUNCHER == False:										
+				if args.scope and NO_LAUNCHER == False:
+
 					#Check and wait until launcher completed
 					launcher_wait_state(TOKEN, ENV_ID, TARGET_CID, args.mode, SCRIPT_TIMEOUT)
+
+					#If mode = append, add or discovery, then display the changes after we create it
+					if TARGET_FILTER == True:
+						if args.mode == "APD" or args.mode == "ADD" or args.mode =="DISC":
+							launcher_filter_output(TOKEN, ENV_ID, TARGET_CID, args.mode, SCOPE_DIFFERENCE)
+
 				else:
 					print ("\n### No scope defined, skipping Launcher Status ###")
 
@@ -727,4 +814,3 @@ if __name__ == '__main__':
 	
 	print ("\n### Script stopped - " + str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")) + "###\n")
 	sys.exit(EXIT_CODE)
-

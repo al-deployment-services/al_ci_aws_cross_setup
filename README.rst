@@ -89,6 +89,7 @@ Arguments
   --env ENV    Environment name, will be displayed in Alert Logic UI under Deployment
   --scope      json formated file with the VPC scope details
   --time       time out in second for this script to run
+  --filter     Filter the output to only show the new changes
 
 The input.json file sample can be found inside this repository, more details about the schema can be found in here:
 * https://console.cloudinsight.alertlogic.com/api/sources/#api-JSON_Formats-AWSEnvironmentSourceJSONFormat
