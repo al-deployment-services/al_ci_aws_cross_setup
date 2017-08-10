@@ -13,8 +13,10 @@ requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 #API Endpoint
 YARP_URL="api.cloudinsight.alertlogic.com"
+ALERT_LOGIC_CI_ASSETS = "https://api.cloudinsight.alertlogic.com/assets/v1/"
 ALERT_LOGIC_CI_SOURCE = "https://api.cloudinsight.alertlogic.com/sources/v1/"
 ALERT_LOGIC_CI_LAUNCHER = "https://api.cloudinsight.alertlogic.com/launcher/v1/"
+ALERT_LOGIC_CI_EXPLORER = "https://api.cloudinsight.alertlogic.com/cloud_explorer/v1/"
 
 #exit code standard:
 #0 = OK
@@ -244,8 +246,58 @@ def get_launcher_data(token, target_env, target_cid):
 		
 	return RESULT
 
+def post_ci_discovery(token, target_env, target_cid, target_type):
+	#Force environment discovery
+	API_ENDPOINT = ALERT_LOGIC_CI_EXPLORER + target_cid + "/environments/" + target_env + "/discover/" + target_type
+	REQUEST = requests.post(API_ENDPOINT, headers={'x-aims-auth-token': token}, verify=False)	
+	RESULT = REQUEST.status_code
+	return RESULT
+
+def get_ci_asset(token, target_env, target_cid, target_id, target_type):
+	#count CI assets based on given CID, ENV ID, KEY and ASSET TYPE
+	API_ENDPOINT = ALERT_LOGIC_CI_ASSETS + target_cid + "/environments/" + target_env + "/assets?asset_types=a:" + target_type + "&a.key=" + target_id	
+	REQUEST = requests.get(API_ENDPOINT, headers={'x-aims-auth-token': token}, verify=False)	
+	RESULT = json.loads(REQUEST.text)
+	return RESULT["rows"]
+
+def get_vpc_status(token, target_env, target_cid, target_vpc_list, timeout):
+	#Wait for all vpc asset to be available (via discovery every 60 seconds)
+	global EXIT_CODE
+	TIMEOUT_COUNTER=60
+
+	print ("\n### Start of target asset (vpc) validation ###")
+
+	VPC_STATUS = False	
+	while VPC_STATUS == False:		
+		VPC_STATUS = True 
+		for vpc_key in target_vpc_list:			
+			VPC_COUNT = get_ci_asset(token, target_env, target_cid, str(vpc_key), "vpc")
+			if VPC_COUNT == 0: 
+				print ("- Cannot find target asset: " + str(vpc_key))
+				VPC_STATUS = False
+
+		if VPC_STATUS == True:
+			print ("- All target asset found - continue to launch")
+			break
+		else:
+			DISCOVERY_STATUS = post_ci_discovery(token, target_env, target_cid, "ec2/vpc")			
+			print ("Re-Discovery status:" + str(DISCOVERY_STATUS) + " - waiting for 60 seconds\n")
+
+		#reduce counter up to the limit timeout
+		timeout = timeout - TIMEOUT_COUNTER
+		if timeout < 0:
+			print ("\n### Script timeout exceeded ###")
+			EXIT_CODE=3
+			break;
+		else:
+			time.sleep(60)
+
+	print ("\n### End of target asset (vpc) validation ###\n")
+
+	return VPC_STATUS
+
 def launcher_filter_output(token, target_env, target_cid, mode, scope_filter):	
-	print ("\n### Filter output, show only changes to environment - mode : " + str(mode) + " ###")
+	print ("### Filter output, show only changes to environment - mode : " + str(mode) + " ###")
 
 	#grab launcher data	
 	LAUNCHER_RESULT = get_launcher_status(token, target_env, target_cid)
@@ -269,7 +321,7 @@ def launcher_wait_state(token, target_env, target_cid,mode, timeout):
 	global EXIT_CODE
 	TIMEOUT_COUNTER=10
 	
-	print ("\n### Check Launcher Status ###")
+	print ("\n### Start of Check Launcher Status ###")
 
 	#give sufficient time for backend to update Launcher status
 	time.sleep(10)
@@ -325,7 +377,8 @@ def launcher_wait_state(token, target_env, target_cid,mode, timeout):
 			break;
 
 		time.sleep(TIMEOUT_COUNTER)
-		
+
+	print ("### End of Check Launcher Status ###\n")
 
 def change_scope_to_list(input_scope, scope_type):
 	temp_list = []
@@ -347,7 +400,10 @@ def filter_scope(source_scope, new_scope, scope_type, mode):
 
 	elif mode == "RMV":		
 		difference_scope = set(source_scope) - (set(source_scope) - set(new_scope))
-		
+	
+	elif mode == "ADD":
+		difference_scope = set(new_scope + source_scope)
+
 	return difference_scope
 
 def append_scope(source_scope, new_scope, scope_limit):
@@ -654,6 +710,10 @@ if __name__ == '__main__':
 					#For Add mode, just use the input scope to replace existing scope
 					if args.mode =="ADD":
 						ENV_PAYLOAD["source"]["config"]["aws"]["scope"] = INPUT_SCOPE
+						if SOURCE_RESULT["source"]["config"]["aws"].has_key("scope"):
+							EXISTING_SCOPE = True
+						else:
+							EXISTING_SCOPE = False
 
 					#For Append mode, add the new scope to the existing scope
 					#For Remove mode, subtract the new scope from existing scope
@@ -725,26 +785,37 @@ if __name__ == '__main__':
 					if not ENV_PAYLOAD["source"]["config"]["aws"]["scope"]["include"]:
 						del ENV_PAYLOAD["source"]["config"]["aws"]["scope"]
 					
-					#Check if filter enabled and find the resultant output after changes applied (ADD / APD / RMV)
-					if TARGET_FILTER == True:
-						if EXISTING_SCOPE == True:
-							SCOPE_DIFFERENCE = filter_scope(SOURCE_RESULT["source"]["config"]["aws"]["scope"]["include"], INPUT_SCOPE["include"], "vpc", args.mode)
-						else:
-							#create dummy source to calculate the resultant scope
-							DUMMY_SOURCE = {}
-							DUMMY_SOURCE["include"] = []
-							DUMMY_SOURCE["exclude"] = []
-							SCOPE_DIFFERENCE = filter_scope(DUMMY_SOURCE["include"], INPUT_SCOPE["include"], "vpc", args.mode)
-						
+					#Find the resultant output after changes applied (ADD / APD / RMV)					
+					if EXISTING_SCOPE == True:
+						SCOPE_DIFFERENCE = filter_scope(SOURCE_RESULT["source"]["config"]["aws"]["scope"]["include"], INPUT_SCOPE["include"], "vpc", args.mode)
+					else:
+						#create dummy source to calculate the resultant scope
+						DUMMY_SOURCE = {}
+						DUMMY_SOURCE["include"] = []
+						DUMMY_SOURCE["exclude"] = []
+						SCOPE_DIFFERENCE = filter_scope(DUMMY_SOURCE["include"], INPUT_SCOPE["include"], "vpc", args.mode)
+					
+					if TARGET_FILTER == True and args.mode == "RMV":
 						#If mode = remove, display the changes before we delete it, otherwise we lose the aws resource info
-						#for other mode (add, apd, disc) wait until the launcher is set before take the filter output
-						if args.mode == "RMV":
-							launcher_filter_output(TOKEN, TARGET_ENV_ID, TARGET_CID, args.mode, SCOPE_DIFFERENCE)
+						#for other mode (add, apd, disc) wait until the launcher is set before take the filter output						
+						launcher_filter_output(TOKEN, TARGET_ENV_ID, TARGET_CID, args.mode, SCOPE_DIFFERENCE)
 
-					#Update the source environment based on env ID and new payload
-					ENV_RESULT = put_source_environment(TOKEN, str(json.dumps(ENV_PAYLOAD, indent=4)), TARGET_CID, TARGET_ENV_ID)
-					ENV_ID = str(ENV_RESULT['source']['id'])
-																		
+					#Check and make sure the vpc is read-able before adding to scope
+					#otherwise the launcher may failed in infinite loop because it can't launch in non-existant VPC					
+					if args.mode == "APD" or args.mode =="ADD":
+						VALID_TARGET = get_vpc_status(TOKEN, TARGET_ENV_ID, TARGET_CID, SCOPE_DIFFERENCE, SCRIPT_TIMEOUT)
+						ENV_ID = "n/a"
+					else:
+						VALID_TARGET = True
+						ENV_ID = "n/a"
+
+					if VALID_TARGET == True:
+						#Update the source environment based on env ID and new payload
+						ENV_RESULT = put_source_environment(TOKEN, str(json.dumps(ENV_PAYLOAD, indent=4)), TARGET_CID, TARGET_ENV_ID)
+						ENV_ID = str(ENV_RESULT['source']['id'])
+					else:
+						EXIT_CODE=2						
+						print ("Failed to find target VPC to launch")
 				else:					
 					print ("Failed to find the environment ID, see response code + reason above, stopping ..")
 		
