@@ -323,8 +323,10 @@ def launcher_wait_state(token, target_env, target_cid,mode, timeout):
 	
 	print ("\n### Start of Check Launcher Status ###")
 
-	#give sufficient time for backend to update Launcher status
+	#give sufficient time for backend to update Launcher status	
 	time.sleep(10)
+	LAUNCHER_STATUS = True
+
 	while True:		
 		if mode == "ADD" or mode == "DISC" or mode =="APD" or mode =="RMV":			
 			#Get Launcher Status and check for each region / VPC
@@ -336,10 +338,15 @@ def launcher_wait_state(token, target_env, target_cid,mode, timeout):
 					print ("Region : " + str(LAUNCHER_REGION["key"])  + " status : " + str(LAUNCHER_REGION["protection_state"]) )
 					if LAUNCHER_REGION["protection_state"] != "completed" and LAUNCHER_REGION["protection_state"] != "removed":
 						LAUNCHER_FLAG = False
+					elif LAUNCHER_REGION["protection_state"] == "failed":
+						#this can occur due to launcher can't see the VPC yet, throw this back 
+						LAUNCHER_FLAG = False
+						LAUNCHER_STATUS = False
 				
-				if LAUNCHER_FLAG == True:				
+				if LAUNCHER_FLAG == True:		
 					print ("\n### Launcher Completed Successfully ###")
 					LAUNCHER_RETRY = 5
+					LAUNCHER_STATUS = True 
 
 					while LAUNCHER_RETRY > 0:									
 						LAUNCHER_DATA = get_launcher_data(token, target_env, target_cid)
@@ -361,6 +368,17 @@ def launcher_wait_state(token, target_env, target_cid,mode, timeout):
 										
 					break
 
+				#this indicate a failure in launcher that needs to be returned 
+				elif LAUNCHER_STATUS == False:
+					print ("\n### One of the launcher failed - returning to retry launch ###")					
+					break
+			else:
+				#Launcher did not execute for any reason
+				LAUNCHER_FLAG = False
+				LAUNCHER_STATUS = False
+				print ("\n### One of the launcher failed - returning to retry launch ###")
+				break;
+
 		elif mode == "DEL":
 			#Get Launcher Status 
 			LAUNCHER_RESULT = get_launcher_status(token, target_env, target_cid)
@@ -379,6 +397,7 @@ def launcher_wait_state(token, target_env, target_cid,mode, timeout):
 		time.sleep(TIMEOUT_COUNTER)
 
 	print ("### End of Check Launcher Status ###\n")
+	return LAUNCHER_STATUS
 
 def change_scope_to_list(input_scope, scope_type):
 	temp_list = []
@@ -804,6 +823,7 @@ if __name__ == '__main__':
 					#otherwise the launcher may failed in infinite loop because it can't launch in non-existant VPC					
 					if args.mode == "APD" or args.mode =="ADD":
 						VALID_TARGET = get_vpc_status(TOKEN, TARGET_ENV_ID, TARGET_CID, SCOPE_DIFFERENCE, SCRIPT_TIMEOUT)
+						# run this to trigger syntetic error for launcher VALID_TARGET = True
 						ENV_ID = "n/a"
 					else:
 						VALID_TARGET = True
@@ -824,11 +844,24 @@ if __name__ == '__main__':
 				print ("Env ID : " + ENV_ID)
 				print ("\n### Cloud Insight Environment created successfully ###")
 
-				#If Scope included, do LAuncher check
+				#If Scope included, do Launcher check
 				if args.scope and NO_LAUNCHER == False:
 
 					#Check and wait until launcher completed
-					launcher_wait_state(TOKEN, ENV_ID, TARGET_CID, args.mode, SCRIPT_TIMEOUT)
+					LAUNCHER_WAIT_STATE_COUNTER = 5
+					while launcher_wait_state(TOKEN, ENV_ID, TARGET_CID, args.mode, SCRIPT_TIMEOUT) == False:
+						time.sleep(10)
+						print ("\n### Retry Environment Update ###")
+						#Update the source environment based on env ID and new payload
+						ENV_RESULT = put_source_environment(TOKEN, str(json.dumps(ENV_PAYLOAD, indent=4)), TARGET_CID, TARGET_ENV_ID)
+
+						if LAUNCHER_WAIT_STATE_COUNTER > 0:
+							LAUNCHER_WAIT_STATE_COUNTER = LAUNCHER_WAIT_STATE_COUNTER -1
+						else:
+							EXIT_CODE = 3
+							print ("\n### Retry limit reached - cancel deployment ###")
+							print ("\n### Script stopped - " + str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")) + "###\n")
+							sys.exit(EXIT_CODE)
 
 					#If mode = append, add or discovery, then display the changes after we create it
 					if TARGET_FILTER == True:
