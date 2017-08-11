@@ -336,14 +336,20 @@ def launcher_wait_state(token, target_env, target_cid,mode, timeout):
 
 				for LAUNCHER_REGION in LAUNCHER_RESULT["scope"]:
 					print ("Region : " + str(LAUNCHER_REGION["key"])  + " status : " + str(LAUNCHER_REGION["protection_state"]) )
-					if LAUNCHER_REGION["protection_state"] != "completed" and LAUNCHER_REGION["protection_state"] != "removed":
-						LAUNCHER_FLAG = False
-					elif LAUNCHER_REGION["protection_state"] == "failed":
-						#this can occur due to launcher can't see the VPC yet, throw this back 
-						LAUNCHER_FLAG = False
+					if LAUNCHER_REGION["protection_state"] == "failed":
+						#this can occur due to launcher can't see the VPC yet, throw this back 						
 						LAUNCHER_STATUS = False
+						LAUNCHER_FLAG = False
+					
+					if LAUNCHER_REGION["protection_state"] != "completed" and LAUNCHER_REGION["protection_state"] != "removed":
+						LAUNCHER_STATUS = True
+						LAUNCHER_FLAG = False
 				
-				if LAUNCHER_FLAG == True:		
+				#this indicate a failure in launcher that needs to be returned 
+				if LAUNCHER_STATUS == False:
+					print ("\n### One of the launcher failed - returning to retry launch ###")					
+					break
+				elif LAUNCHER_FLAG == True:		
 					print ("\n### Launcher Completed Successfully ###")
 					LAUNCHER_RETRY = 5
 					LAUNCHER_STATUS = True 
@@ -368,10 +374,7 @@ def launcher_wait_state(token, target_env, target_cid,mode, timeout):
 										
 					break
 
-				#this indicate a failure in launcher that needs to be returned 
-				elif LAUNCHER_STATUS == False:
-					print ("\n### One of the launcher failed - returning to retry launch ###")					
-					break
+				
 			else:
 				#Launcher did not execute for any reason
 				LAUNCHER_FLAG = False
