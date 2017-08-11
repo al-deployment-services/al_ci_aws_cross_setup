@@ -341,7 +341,7 @@ def launcher_wait_state(token, target_env, target_cid,mode, timeout):
 						LAUNCHER_STATUS = False
 						LAUNCHER_FLAG = False
 					
-					if LAUNCHER_REGION["protection_state"] != "completed" and LAUNCHER_REGION["protection_state"] != "removed":
+					elif LAUNCHER_REGION["protection_state"] != "completed" and LAUNCHER_REGION["protection_state"] != "removed":
 						LAUNCHER_STATUS = True
 						LAUNCHER_FLAG = False
 				
