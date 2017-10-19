@@ -90,9 +90,12 @@ Arguments
   --scope      json formated file with the VPC scope details
   --time       time out in second for this script to run
   --filter     Filter the output to only show the new changes
+  --skip       Skip schema validation check
 
 The input.json file sample can be found inside this repository, more details about the schema can be found in here:
 * https://console.cloudinsight.alertlogic.com/api/sources/#api-JSON_Formats-AWSEnvironmentSourceJSONFormat
+
+Warning: If you skip the schema validation check, the subsequent add / remove / update may error due to missing component in the scope file, use --skip with caution.
 
 Exit Code
 ----------

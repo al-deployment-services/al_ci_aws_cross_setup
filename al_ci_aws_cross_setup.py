@@ -546,6 +546,7 @@ if __name__ == '__main__':
 	dis_parser.add_argument("--scope", required=False, help="Optional path to JSON file with the region / scope scope detail")
 	dis_parser.add_argument("--time", required=False, help="Time out in second for this script to run")
 	dis_parser.add_argument("--filter", required=False, help="Filter the output to only show the new changes", default=False, action='store_true')
+	dis_parser.add_argument("--skip", required=False, help="Skip schema validation check", default=True, action='store_false')
 
 	#Parser argument for Add scope
 	add_parser.add_argument("--user", required=True, help="User name / email address for API Authentication")
@@ -555,6 +556,7 @@ if __name__ == '__main__':
 	add_parser.add_argument("--scope", required=True, help="Path to JSON file with the region / scope scope detail")
 	add_parser.add_argument("--time", required=False, help="Time out in second for this script to run")
 	add_parser.add_argument("--filter", required=False, help="Filter the output to only show the new changes", default=False, action='store_true')
+	add_parser.add_argument("--skip", required=False, help="Skip schema validation check", default=True, action='store_false')
 
 	#Parser argument for Delete environment
 	del_parser.add_argument("--user", required=True, help="User name / email address for API Authentication")
@@ -563,6 +565,7 @@ if __name__ == '__main__':
 	del_parser.add_argument("--envid", required=True, help="Cloud Insight Environment ID as target for removal")
 	del_parser.add_argument("--time", required=False, help="Time out in second for this script to run")
 	del_parser.add_argument("--filter", required=False, help="Filter the output to only show the new changes", default=False, action='store_true')
+	del_parser.add_argument("--skip", required=False, help="Skip schema validation check", default=True, action='store_false')
 
 	#Parser argument for Append scope
 	apd_parser.add_argument("--user", required=True, help="User name / email address for API Authentication")
@@ -572,6 +575,7 @@ if __name__ == '__main__':
 	apd_parser.add_argument("--scope", required=True, help="Path to JSON file with the region / scope scope detail")
 	apd_parser.add_argument("--time", required=False, help="Time out in second for this script to run")
 	apd_parser.add_argument("--filter", required=False, help="Filter the output to only show the new changes", default=False, action='store_true')
+	apd_parser.add_argument("--skip", required=False, help="Skip schema validation check", default=True, action='store_false')
 
 	#Parser argument for Remove scope
 	rmv_parser.add_argument("--user", required=True, help="User name / email address for API Authentication")
@@ -581,6 +585,7 @@ if __name__ == '__main__':
 	rmv_parser.add_argument("--scope", required=True, help="Path to JSON file with the region / scope scope detail")
 	rmv_parser.add_argument("--time", required=False, help="Time out in second for this script to run")
 	rmv_parser.add_argument("--filter", required=False, help="Filter the output to only show the new changes", default=False, action='store_true')
+	rmv_parser.add_argument("--skip", required=False, help="Skip schema validation check", default=True, action='store_false')
 	
 	try:
 		args = parent_parser.parse_args()
@@ -601,6 +606,7 @@ if __name__ == '__main__':
 		TARGET_CRED_NAME = args.cred
 		TARGET_ENV_NAME = args.env
 		TARGET_SCOPE = args.scope
+		ENFORCE_SCHEMA = args.skip
 		
 	elif args.mode == "ADD" or args.mode == "APD" or args.mode == "RMV":
 		EMAIL_ADDRESS = args.user
@@ -608,12 +614,14 @@ if __name__ == '__main__':
 		TARGET_CID = args.cid	
 		TARGET_ENV_ID = args.envid
 		TARGET_SCOPE = args.scope		
+		ENFORCE_SCHEMA = args.skip
 
 	elif args.mode == "DEL":
 		EMAIL_ADDRESS = args.user
 		PASSWORD = args.pswd
 		TARGET_CID = args.cid	
 		TARGET_ENV_ID = args.envid		
+		ENFORCE_SCHEMA = args.skip
 	
 	#Initialize output filter
 	TARGET_FILTER = args.filter
@@ -643,10 +651,13 @@ if __name__ == '__main__':
 
 			if INPUT_SCOPE != False:
 				#Check input file against the json schema to make sure it's valid
-				if scope_schema_check(INPUT_SCOPE):
+				if scope_schema_check(INPUT_SCOPE) and ENFORCE_SCHEMA == True:
 					print ("\n### Schema validation OK - continue to add / update / remove the environment scope ###")
 					VALID_SCOPE = True
 
+				elif ENFORCE_SCHEMA == False:
+					print ("\n### WARNING Schema validation SKIPPED - continue to add / update / remove the environment scope ###")
+					VALID_SCOPE = True
 				else:
 					print ("\n### Schema validation issues, please read error message above ###")
 					VALID_SCOPE = False
