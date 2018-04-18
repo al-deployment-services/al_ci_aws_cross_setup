@@ -2,8 +2,8 @@ Wrapper for Launching Alert Logic Cloud Insight Environment
 ===========================================================
 This script will register credentials and launch new Cloud Insight environment based on the given scope. Components that will be created:
 
-- New Credentials based on the provided IAM role + external ID 
-- New Cloud Insight environment based on the given credentials and scope 
+- New Credentials based on the provided IAM role + external ID
+- New Cloud Insight environment based on the given credentials and scope
 
 
 Requirements
@@ -19,8 +19,8 @@ Deployment Mode
 * DISC = launch Cloud Insight with or without scope, initiate AWS environment discovery
 * ADD = update existing Cloud Insight environment with new scope (replace)
 * DEL = delete the existing Cloud Insight environment
-* APD = append scope to existing environment 
-* RMV = remove scope from existing environment 
+* APD = append scope to existing environment
+* RMV = remove scope from existing environment
 
 
 Sample Usage - Discovery
@@ -84,7 +84,7 @@ Arguments
   --cid CID    Alert Logic Customer CID as target for this deployment
   --aws AWS    Customer AWS Account Number where IAM role is deployed
   --arn ARN    Cross Account IAM role arn
-  --ext EXT    External ID specified in IAM role trust relationship
+  --ext EXT    External ID specified in IAM role trust relationship (must equal to CID)
   --cred CRED  Credential name, free form label, not visible in Alert Logic UI
   --env ENV    Environment name, will be displayed in Alert Logic UI under Deployment
   --scope      json formated file with the VPC scope details
@@ -104,7 +104,7 @@ If you going to integrate this script to another orchestration tool, you can use
 * 0 = script run successfully
 * 1 = missing or invalid argument
 * 2 = environment issue such as invalid environment id, invalid password, or invalid scope
-* 3 = timeout 
+* 3 = timeout
 
 WARNING: This script will not revert back any changes due to timeout, any commands / API calls that it executed prior to timeout will run until completed, even if the script exit due to timeout.
 
@@ -113,5 +113,5 @@ License and Authors
 License:
 Distributed under the Apache 2.0 license.
 
-Authors: 
+Authors:
 Welly Siauw (welly.siauw@alertlogic.com)
