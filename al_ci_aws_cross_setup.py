@@ -588,7 +588,8 @@ def saturn_wait_state(token, target_env, target_cid, mode, timeout):
 			#Get SATURN Status
 			SATURN_RESULT = get_saturn_status(token, target_env, target_cid)
 			if SATURN_RESULT != False and len(SATURN_RESULT) > 0:
-				print ("VPC: " + str(SATURN_VPC["vpc_key"])  + " state: " + str(SATURN_VPC["status"]["state"]) )
+				for SATURN_VPC in SATURN_RESULT:
+					print ("VPC: " + str(SATURN_VPC["vpc_key"])  + " state: " + str(SATURN_VPC["status"]["state"]) )
 
 			if len(SATURN_RESULT) == 0:
 				print ("\n### SATURN Deleted Successfully ###")
