@@ -796,6 +796,7 @@ if __name__ == '__main__':
 	rmv_parser.add_argument("--time", required=False, help="Time out in second for this script to run")
 	rmv_parser.add_argument("--filter", required=False, help="Filter the output to only show the new changes", default=False, action='store_true')
 	rmv_parser.add_argument("--skip", required=False, help="Skip schema validation check", default=True, action='store_false')
+	rmv_parser.add_argument("--otis", required=False, help="Path to CSV file for Otis / CI Guided config")
 
 	try:
 		args = parent_parser.parse_args()
