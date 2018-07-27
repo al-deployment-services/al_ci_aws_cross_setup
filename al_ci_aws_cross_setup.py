@@ -17,6 +17,7 @@ ALERT_LOGIC_CI_ASSETS = "https://api.cloudinsight.alertlogic.com/assets/v1/"
 ALERT_LOGIC_CI_SOURCE = "https://api.cloudinsight.alertlogic.com/sources/v1/"
 ALERT_LOGIC_CI_LAUNCHER = "https://api.cloudinsight.alertlogic.com/launcher/v1/"
 ALERT_LOGIC_CI_EXPLORER = "https://api.cloudinsight.alertlogic.com/cloud_explorer/v1/"
+ALERT_LOGIC_CI_OTIS = "https://api.cloudinsight.alertlogic.com/otis/v2/"
 
 #exit code standard:
 #0 = OK
@@ -267,6 +268,18 @@ def put_source_environment(token, payload, target_cid, target_env_id):
 		RESULT = {}
 		RESULT['source'] = {}
 		RESULT['source']['id'] = "n/a"
+	return RESULT
+
+def post_otis_options(token, payload, target_cid):
+	#Call API with method POST to create new environment
+	API_ENDPOINT = ALERT_LOGIC_CI_OTIS + target_cid + "/options"
+	REQUEST = requests.post(API_ENDPOINT, headers={'x-aims-auth-token': token}, verify=False, data=payload)
+	print ("Add Otis Options Status : " + str(REQUEST.status_code), str(REQUEST.reason))
+	if REQUEST.status_code == 201:
+		RESULT = json.loads(REQUEST.text)
+	else:
+		RESULT = {}
+		RESULT['id'] = "n/a"
 	return RESULT
 
 def del_source_environment(token, target_env, target_cid):
@@ -777,6 +790,18 @@ if __name__ == '__main__':
 		else:
 			print ("### No otis options included ###")
 			VALID_OTIS = False
+
+		#TODO: add otis config
+		if VALID_OTIS:
+			for options in OTIS_OPTIONS:
+				OPTION_RESULT = post_otis_options(TOKEN, json.dumps(options, indent=3), TARGET_CID)
+				OPTION_ID = str(OPTION_RESULT['id'])
+
+				if OPTION_ID != "n/a":
+					print ("Otis options: " + options["name"] + " value: " + options["value"] + " id: " + OPTION_ID)
+				else:
+					print ("Otis options: " + options["name"] + " value: " + options["value"] + " create failed")
+
 		sys.exit(0)
 
 		#Handling missing scope
@@ -972,6 +997,9 @@ if __name__ == '__main__':
 
 					#Check and wait until launcher completed
 					LAUNCHER_WAIT_STATE_COUNTER = 5
+
+					#TODO : conditional for otis (saturn) vs launcher
+
 					while launcher_wait_state(TOKEN, ENV_ID, TARGET_CID, args.mode, SCRIPT_TIMEOUT) == False:
 						time.sleep(10)
 						print ("\n### Retry Environment Update ###")
