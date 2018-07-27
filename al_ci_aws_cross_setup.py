@@ -219,7 +219,7 @@ def post_credentials(token, payload, target_cid):
 		RESULT['credential']['id'] = "n/a"
 	return RESULT
 
-def prep_ci_source_environment(aws_account, cred_id, environment_name, scope_data):
+def prep_ci_source_environment(aws_account, cred_id, environment_name, scope_data, enable_otis = False):
 	#Setup dictionary for environment payload
 	RESULT = {}
 	RESULT['source']  = {}
@@ -238,6 +238,8 @@ def prep_ci_source_environment(aws_account, cred_id, environment_name, scope_dat
 
 	RESULT['source']['config']['collection_method'] = "api"
 	RESULT['source']['config']['collection_type'] = "aws"
+	if enable_otis:
+		RESULT['source']['config']['deployment_mode'] = "guided"
 	RESULT['source']['enabled'] = True
 	RESULT['source']['name'] = environment_name
 	RESULT['source']['product_type'] = "outcomes"
@@ -520,14 +522,14 @@ def saturn_wait_state(token, target_env, target_cid, mode, timeout):
 		if mode == "ADD" or mode == "DISC" or mode =="APD" or mode =="RMV":
 			#Get SATURN Status and check for each region / VPC
 			SATURN_RESULT = get_saturn_status(token, target_env, target_cid)
-			if SATURN_RESULT != False:
+			if SATURN_RESULT != False and len(SATURN_RESULT) > 0:
 				SATURN_FLAG = True
 				for SATURN_VPC in SATURN_RESULT:
 					print ("VPC: " + str(SATURN_VPC["vpc_key"])  + " state: " + str(SATURN_VPC["status"]["state"]) )
-					if SATURN_VPC["status"]["state"]["status"] != "completed" and SATURN_VPC["status"]["state"]["operations"] == "deploy":
+					if SATURN_VPC["status"]["state"]["status"] != "completed" and SATURN_VPC["status"]["state"]["operation"] == "deploy":
 						SATURN_STATUS = True
 						SATURN_FLAG = False
-					elif SATURN_VPC["status"]["state"]["status"] != "completed" and SATURN_VPC["status"]["state"]["operations"] == "remove":
+					elif SATURN_VPC["status"]["state"]["status"] != "completed" and SATURN_VPC["status"]["state"]["operation"] == "remove":
 						SATURN_STATUS = True
 						SATURN_FLAG = False
 
@@ -546,6 +548,8 @@ def saturn_wait_state(token, target_env, target_cid, mode, timeout):
 						print ("SG: " + str(SATURN_VPC["resources"][0]["security_group"]["details"]["group_id"]))
 						print ("\n")
 					break
+			elif len(SATURN_RESULT) == 0:
+				print ("\n### SATURN data not ready, waiting ... ###")
 			else:
 				#SATURN did not execute for any reason
 				SATURN_FLAG = False
@@ -555,10 +559,13 @@ def saturn_wait_state(token, target_env, target_cid, mode, timeout):
 
 		elif mode == "DEL":
 			#Get SATURN Status
-			SATURN_RESULT = get_SATURN_status(token, target_env, target_cid)
+			SATURN_RESULT = get_saturn_status(token, target_env, target_cid)
 
-			if SATURN_RESULT == False:
+			if len(SATURN_RESULT) == 0:
 				print ("\n### SATURN Deleted Successfully ###")
+				break;
+			elif SATURN_RESULT == False:
+				print ("\n### SATURN retrival failed ###")
 				break;
 
 		#Sleep for 10 seconds
@@ -923,7 +930,7 @@ if __name__ == '__main__':
 			if args.mode == "DISC":
 				#Create new environment using credentials ID and target AWS Account number
 				#use the input file as the scope
-				ENV_PAYLOAD = prep_ci_source_environment(TARGET_AWS_ACCOUNT, CRED_ID, TARGET_ENV_NAME, INPUT_SCOPE)
+				ENV_PAYLOAD = prep_ci_source_environment(TARGET_AWS_ACCOUNT, CRED_ID, TARGET_ENV_NAME, INPUT_SCOPE, enable_otis = VALID_OTIS)
 
 				#Create new environment to kick discovery
 				ENV_RESULT = post_source_environment(TOKEN, str(json.dumps(ENV_PAYLOAD, indent=4)), TARGET_CID)
@@ -1151,7 +1158,10 @@ if __name__ == '__main__':
 			del_source_environment(TOKEN, TARGET_ENV_ID, TARGET_CID)
 
 			#Check and wait until launcher completed
-			launcher_wait_state(TOKEN, TARGET_ENV_ID, TARGET_CID, args.mode, SCRIPT_TIMEOUT)
+			if SOURCE_RESULT["source"]["config"]["deployment_mode"] == "guided":
+				saturn_wait_state(TOKEN, TARGET_ENV_ID, TARGET_CID, args.mode, SCRIPT_TIMEOUT)
+			else:
+				launcher_wait_state(TOKEN, TARGET_ENV_ID, TARGET_CID, args.mode, SCRIPT_TIMEOUT)
 
 			#Delete the credentials associated with that environment
 			del_source_credentials(TOKEN, TARGET_CRED_ID, TARGET_CID)
