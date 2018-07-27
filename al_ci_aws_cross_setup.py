@@ -516,10 +516,34 @@ def saturn_wait_state(token, target_env, target_cid, mode, timeout):
 
 	#give sufficient time for backend to update SATURN status
 	time.sleep(10)
-	SATURN_STATUS = True
 
+	#Make sure environment in OK status before performing saturn check
+	if mode == "ADD" or mode == "DISC" or mode =="APD" or mode =="RMV":
+		print ("### Review the CI environment status after create/update ###")
+		env_timeout = timeout
+		while True:
+			ENV_RESULT = get_source_environment(token, target_env, target_cid)
+			if ENV_RESULT["source"]["id"] != "n/a":
+				print ("Environment: " + str(target_env) + " status: " + str(ENV_RESULT["source"]["status"]["status"]))
+				if ENV_RESULT["source"]["status"]["status"] == "ok":
+					print ("Environment ready - continue with Saturn check")
+					break
+				else:
+					print ("Environment not ready, waiting ...")
+			else:
+				print ("\n### Failed to check Source - script may timeout before saturn check completed ###")
+
+			#Sleep for 10 seconds
+			env_timeout = env_timeout - TIMEOUT_COUNTER
+			if env_timeout < 0:
+				print ("\n### Timeout while waiting for environment change to OK - script may timeout before saturn check completed ###")
+				EXIT_CODE=3
+				break;
+			time.sleep(TIMEOUT_COUNTER)
+
+	SATURN_STATUS = True
 	while True:
-		if mode == "ADD" or mode == "DISC" or mode =="APD" or mode =="RMV":
+		if mode == "ADD" or mode =="APD" or mode =="RMV":
 			#Get SATURN Status and check for each region / VPC
 			SATURN_RESULT = get_saturn_status(token, target_env, target_cid)
 			if SATURN_RESULT != False and len(SATURN_RESULT) > 0:
@@ -545,7 +569,7 @@ def saturn_wait_state(token, target_env, target_cid, mode, timeout):
 					for SATURN_VPC in SATURN_RESULT:
 						print ("Region: " + str(SATURN_VPC["vpc_key"].split("/")[2]))
 						print ("VPC: " + str(SATURN_VPC["vpc_key"].split("/")[4]))
-						print ("SG: " + str(SATURN_VPC["resources"][0]["security_group"]["details"]["group_id"]))
+						print ("SG: " + str((resource for resource in SATURN_VPC["resources"] if resource["type"] == "security_group").next()["details"]["group_id"]))
 						print ("\n")
 					break
 			elif len(SATURN_RESULT) == 0:
@@ -557,9 +581,14 @@ def saturn_wait_state(token, target_env, target_cid, mode, timeout):
 				print ("\n### One of the SATURN failed - returning to retry launch ###")
 				break;
 
+		elif mode == "DISC":
+			print ("\n### Mode: DISC - skip SATURN check###")
+			break
 		elif mode == "DEL":
 			#Get SATURN Status
 			SATURN_RESULT = get_saturn_status(token, target_env, target_cid)
+			if SATURN_RESULT != False and len(SATURN_RESULT) > 0:
+				print ("VPC: " + str(SATURN_VPC["vpc_key"])  + " state: " + str(SATURN_VPC["status"]["state"]) )
 
 			if len(SATURN_RESULT) == 0:
 				print ("\n### SATURN Deleted Successfully ###")
@@ -930,7 +959,15 @@ if __name__ == '__main__':
 			if args.mode == "DISC":
 				#Create new environment using credentials ID and target AWS Account number
 				#use the input file as the scope
-				ENV_PAYLOAD = prep_ci_source_environment(TARGET_AWS_ACCOUNT, CRED_ID, TARGET_ENV_NAME, INPUT_SCOPE, enable_otis = VALID_OTIS)
+				#if Otis enabled, launch with blank scope first
+				if VALID_OTIS:
+					#Prepare empty scope for discovery
+					INPUT_SCOPE = {}
+					INPUT_SCOPE["include"] = []
+					INPUT_SCOPE["exclude"] = []
+					ENV_PAYLOAD = prep_ci_source_environment(TARGET_AWS_ACCOUNT, CRED_ID, TARGET_ENV_NAME, INPUT_SCOPE, enable_otis = VALID_OTIS)
+				else:
+					ENV_PAYLOAD = prep_ci_source_environment(TARGET_AWS_ACCOUNT, CRED_ID, TARGET_ENV_NAME, INPUT_SCOPE, enable_otis = VALID_OTIS)
 
 				#Create new environment to kick discovery
 				ENV_RESULT = post_source_environment(TOKEN, str(json.dumps(ENV_PAYLOAD, indent=4)), TARGET_CID)
@@ -1089,7 +1126,7 @@ if __name__ == '__main__':
 							time.sleep(10)
 							print ("\n### Retry Environment Update ###")
 							#Update the source environment based on env ID and new payload
-							ENV_RESULT = put_source_environment(TOKEN, str(json.dumps(ENV_PAYLOAD, indent=4)), TARGET_CID, TARGET_ENV_ID)
+							ENV_RESULT = put_source_environment(TOKEN, str(json.dumps(ENV_PAYLOAD, indent=4)), TARGET_CID, ENV_ID)
 
 							if LAUNCHER_WAIT_STATE_COUNTER > 0:
 								LAUNCHER_WAIT_STATE_COUNTER = LAUNCHER_WAIT_STATE_COUNTER -1
@@ -1104,7 +1141,7 @@ if __name__ == '__main__':
 							time.sleep(10)
 							print ("\n### Retry Environment Update ###")
 							#Update the source environment based on env ID and new payload
-							ENV_RESULT = put_source_environment(TOKEN, str(json.dumps(ENV_PAYLOAD, indent=4)), TARGET_CID, TARGET_ENV_ID)
+							ENV_RESULT = put_source_environment(TOKEN, str(json.dumps(ENV_PAYLOAD, indent=4)), TARGET_CID, ENV_ID)
 
 							if LAUNCHER_WAIT_STATE_COUNTER > 0:
 								LAUNCHER_WAIT_STATE_COUNTER = LAUNCHER_WAIT_STATE_COUNTER -1
