@@ -18,6 +18,7 @@ ALERT_LOGIC_CI_SOURCE = "https://api.cloudinsight.alertlogic.com/sources/v1/"
 ALERT_LOGIC_CI_LAUNCHER = "https://api.cloudinsight.alertlogic.com/launcher/v1/"
 ALERT_LOGIC_CI_EXPLORER = "https://api.cloudinsight.alertlogic.com/cloud_explorer/v1/"
 ALERT_LOGIC_CI_OTIS = "https://api.cloudinsight.alertlogic.com/otis/v2/"
+ALERT_LOGIC_CI_SATURN = "https://api.cloudinsight.alertlogic.com/saturn/v1/"
 
 #exit code standard:
 #0 = OK
@@ -336,6 +337,18 @@ def get_launcher_data(token, target_env, target_cid):
 
 	return RESULT
 
+def get_saturn_status(token, target_env, target_cid):
+	#Check if Launcher is completed
+	API_ENDPOINT = ALERT_LOGIC_CI_SATURN + target_cid + "/installations?deployment_id=" + target_env
+	REQUEST = requests.get(API_ENDPOINT, headers={'x-aims-auth-token': token}, verify=False)
+
+	print ("Retrieving Environment launch status : " + str(REQUEST.status_code), str(REQUEST.reason))
+	if REQUEST.status_code == 200:
+		RESULT = json.loads(REQUEST.text)
+	else:
+		RESULT = False
+	return RESULT
+
 def post_ci_discovery(token, target_env, target_cid, target_type):
 	#Force environment discovery
 	API_ENDPOINT = ALERT_LOGIC_CI_EXPLORER + target_cid + "/environments/" + target_env + "/discover/" + target_type
@@ -491,6 +504,74 @@ def launcher_wait_state(token, target_env, target_cid,mode, timeout):
 
 	print ("### End of Check Launcher Status ###\n")
 	return LAUNCHER_STATUS
+
+def saturn_wait_state(token, target_env, target_cid, mode, timeout):
+	#Wait for SATURN to be fully deployed
+	global EXIT_CODE
+	TIMEOUT_COUNTER=10
+
+	print ("\n### Start of Check Saturn Status ###")
+
+	#give sufficient time for backend to update SATURN status
+	time.sleep(10)
+	SATURN_STATUS = True
+
+	while True:
+		if mode == "ADD" or mode == "DISC" or mode =="APD" or mode =="RMV":
+			#Get SATURN Status and check for each region / VPC
+			SATURN_RESULT = get_saturn_status(token, target_env, target_cid)
+			if SATURN_RESULT != False:
+				SATURN_FLAG = True
+				for SATURN_VPC in SATURN_RESULT:
+					print ("VPC: " + str(SATURN_VPC["vpc_key"])  + " state: " + str(SATURN_VPC["status"]["state"]) )
+					if SATURN_VPC["status"]["state"]["status"] != "completed" and SATURN_VPC["status"]["state"]["operations"] == "deploy":
+						SATURN_STATUS = True
+						SATURN_FLAG = False
+					elif SATURN_VPC["status"]["state"]["status"] != "completed" and SATURN_VPC["status"]["state"]["operations"] == "remove":
+						SATURN_STATUS = True
+						SATURN_FLAG = False
+
+				#this indicate a failure in SATURN that needs to be returned
+				if SATURN_STATUS == False:
+					print ("\n### One of the SATURN failed - returning to retry launch ###")
+					break
+				elif SATURN_FLAG == True:
+					SATURN_STATUS = True
+					print ("\n### SATURN Completed Successfully ###")
+					print ("\n### Successfully retrieve SATURN data ###")
+
+					for SATURN_VPC in SATURN_RESULT:
+						print ("Region: " + str(SATURN_VPC["vpc_key"].split("/")[2]))
+						print ("VPC: " + str(SATURN_VPC["vpc_key"].split("/")[4]))
+						print ("SG: " + str(SATURN_VPC["resources"][0]["security_group"]["details"]["group_id"]))
+						print ("\n")
+					break
+			else:
+				#SATURN did not execute for any reason
+				SATURN_FLAG = False
+				SATURN_STATUS = False
+				print ("\n### One of the SATURN failed - returning to retry launch ###")
+				break;
+
+		elif mode == "DEL":
+			#Get SATURN Status
+			SATURN_RESULT = get_SATURN_status(token, target_env, target_cid)
+
+			if SATURN_RESULT == False:
+				print ("\n### SATURN Deleted Successfully ###")
+				break;
+
+		#Sleep for 10 seconds
+		timeout = timeout - TIMEOUT_COUNTER
+		if timeout < 0:
+			print ("\n### Script timeout exceeded ###")
+			EXIT_CODE=3
+			break;
+
+		time.sleep(TIMEOUT_COUNTER)
+
+	print ("### End of Check SATURN Status ###\n")
+	return SATURN_STATUS
 
 def change_scope_to_list(input_scope, scope_type):
 	temp_list = []
@@ -796,13 +877,10 @@ if __name__ == '__main__':
 			for options in OTIS_OPTIONS:
 				OPTION_RESULT = post_otis_options(TOKEN, json.dumps(options, indent=3), TARGET_CID)
 				OPTION_ID = str(OPTION_RESULT['id'])
-
 				if OPTION_ID != "n/a":
 					print ("Otis options: " + options["name"] + " value: " + options["value"] + " id: " + OPTION_ID)
 				else:
 					print ("Otis options: " + options["name"] + " value: " + options["value"] + " create failed")
-
-		sys.exit(0)
 
 		#Handling missing scope
 		NO_LAUNCHER = False
@@ -999,25 +1077,41 @@ if __name__ == '__main__':
 					LAUNCHER_WAIT_STATE_COUNTER = 5
 
 					#TODO : conditional for otis (saturn) vs launcher
+					if VALID_OTIS:
+						while saturn_wait_state(TOKEN, ENV_ID, TARGET_CID, args.mode, SCRIPT_TIMEOUT) == False:
+							time.sleep(10)
+							print ("\n### Retry Environment Update ###")
+							#Update the source environment based on env ID and new payload
+							ENV_RESULT = put_source_environment(TOKEN, str(json.dumps(ENV_PAYLOAD, indent=4)), TARGET_CID, TARGET_ENV_ID)
 
-					while launcher_wait_state(TOKEN, ENV_ID, TARGET_CID, args.mode, SCRIPT_TIMEOUT) == False:
-						time.sleep(10)
-						print ("\n### Retry Environment Update ###")
-						#Update the source environment based on env ID and new payload
-						ENV_RESULT = put_source_environment(TOKEN, str(json.dumps(ENV_PAYLOAD, indent=4)), TARGET_CID, TARGET_ENV_ID)
+							if LAUNCHER_WAIT_STATE_COUNTER > 0:
+								LAUNCHER_WAIT_STATE_COUNTER = LAUNCHER_WAIT_STATE_COUNTER -1
+							else:
+								EXIT_CODE = 3
+								print ("\n### Retry limit reached - cancel deployment ###")
+								print ("\n### Script stopped - " + str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")) + "###\n")
+								sys.exit(EXIT_CODE)
 
-						if LAUNCHER_WAIT_STATE_COUNTER > 0:
-							LAUNCHER_WAIT_STATE_COUNTER = LAUNCHER_WAIT_STATE_COUNTER -1
-						else:
-							EXIT_CODE = 3
-							print ("\n### Retry limit reached - cancel deployment ###")
-							print ("\n### Script stopped - " + str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")) + "###\n")
-							sys.exit(EXIT_CODE)
+					else:
+						while launcher_wait_state(TOKEN, ENV_ID, TARGET_CID, args.mode, SCRIPT_TIMEOUT) == False:
+							time.sleep(10)
+							print ("\n### Retry Environment Update ###")
+							#Update the source environment based on env ID and new payload
+							ENV_RESULT = put_source_environment(TOKEN, str(json.dumps(ENV_PAYLOAD, indent=4)), TARGET_CID, TARGET_ENV_ID)
+
+							if LAUNCHER_WAIT_STATE_COUNTER > 0:
+								LAUNCHER_WAIT_STATE_COUNTER = LAUNCHER_WAIT_STATE_COUNTER -1
+							else:
+								EXIT_CODE = 3
+								print ("\n### Retry limit reached - cancel deployment ###")
+								print ("\n### Script stopped - " + str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")) + "###\n")
+								sys.exit(EXIT_CODE)
 
 					#If mode = append, add or discovery, then display the changes after we create it
 					if TARGET_FILTER == True:
 						if args.mode == "APD" or args.mode == "ADD" or args.mode =="DISC":
-							launcher_filter_output(TOKEN, ENV_ID, TARGET_CID, args.mode, SCOPE_DIFFERENCE)
+							if not args.otis:
+								launcher_filter_output(TOKEN, ENV_ID, TARGET_CID, args.mode, SCOPE_DIFFERENCE)
 
 				else:
 					print ("\n### No scope defined, skipping Launcher Status ###")
