@@ -1,0 +1,22 @@
+[
+	{
+		"name": "predefined_security_subnet",
+		"scope":
+		{
+			"provider_type": "aws",
+			"provider_id": "989608343549",
+			"vpc_id": "vpc-57413430"
+		},
+		"value": "subnet-e17c3bba"
+	},
+	{
+		"name": "predefined_security_subnet",
+		"scope":
+		{
+			"provider_type": "aws",
+			"provider_id": "123456789012",
+			"vpc_id": "vpc-3850036c"
+		},
+		"value": "subnet-b12ecd41"
+	}
+]
