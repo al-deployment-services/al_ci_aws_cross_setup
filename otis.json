@@ -14,9 +14,9 @@
 		"scope":
 		{
 			"provider_type": "aws",
-			"provider_id": "123456789012",
-			"vpc_id": "vpc-3850036c"
+			"provider_id": "989608343549",
+			"vpc_id": "vpc-d58792ac"
 		},
-		"value": "subnet-b12ecd41"
+		"value": "subnet-3b541061"
 	}
 ]

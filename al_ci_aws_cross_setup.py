@@ -573,7 +573,11 @@ def saturn_wait_state(token, target_env, target_cid, mode, timeout):
 						print ("\n")
 					break
 			elif len(SATURN_RESULT) == 0:
-				print ("\n### SATURN data not ready, waiting ... ###")
+				if mode == "RMV":
+					print ("\n### SATURN Status Removed Successfully ###")
+					break
+				else:
+					print ("\n### SATURN data not ready, waiting ... ###")
 			else:
 				#SATURN did not execute for any reason
 				SATURN_FLAG = False
