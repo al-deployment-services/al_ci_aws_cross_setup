@@ -103,8 +103,7 @@ The `otis.json` or `otis.csv` file sample also can be found inside this reposito
 
 Warning: If you skip the schema validation check, the subsequent add / remove / update may error due to missing component in the scope file, use --skip with caution.
 
-Exit Code
-----------
+## Exit Code
 If you going to integrate this script to another orchestration tool, you can use the exit code to detect the status:
 
 * 0 = script run successfully
@@ -114,8 +113,7 @@ If you going to integrate this script to another orchestration tool, you can use
 
 WARNING: This script will not revert back any changes due to timeout, any commands / API calls that it executed prior to timeout will run until completed, even if the script exit due to timeout.
 
-License and Authors
-===================
+# License and Authors
 License:
 Distributed under the Apache 2.0 license.
 
