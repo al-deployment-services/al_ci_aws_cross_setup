@@ -26,46 +26,57 @@ This script support deployment in two mode:
 
 
 ## Sample Usage - Discovery
-Discovery with scope, replace the parameters to match your environment and run this command ::
+Discovery with scope, replace the parameters to match your environment and run this command:
 
 	python al_ci_aws_cross_setup.py DISC --user first.last@company.com --pswd MyCloudInsightPassword --cid 10000 --aws 052672429986 --arn arn:aws:iam::052672429986:role/AlertLogicCrossAccountCI --ext My_ext_id --cred TestArgCred --env TestEnv --scope input.json
 
-Discovery only, replace the parameters to match your environment and run this command ::
+Discovery only, replace the parameters to match your environment and run this command:
 
     python al_ci_aws_cross_setup.py DISC --user first.last@company.com --pswd MyCloudInsightPassword --cid 10000 --aws 052672429986 --arn arn:aws:iam::052672429986:role/AlertLogicCrossAccountCI --ext My_ext_id --cred TestArgCred --env TestEnv
 
 Take note of the output from the script, you will need to record the Environment ID if you wish to delete it later using this script (see below)
 
-## Sample Usage - Discovery + Guided
-Guided Discovery with scope, replace the parameters to match your environment and run this command ::
+### Discovery + Guided
+Discovery in guided mode with scope, this will deploy environment with empty scope, regardless what you put into the input scope ::
 
 	python al_ci_aws_cross_setup.py DISC --user first.last@company.com --pswd MyCloudInsightPassword --cid 10000 --aws 052672429986 --arn arn:aws:iam::052672429986:role/AlertLogicCrossAccountCI --ext My_ext_id --cred TestArgCred --env TestEnv --scope input.csv --otis otis.csv
 
 ## Sample Usage - Add
-Add / replace scope of existing environment, replace the parameters to match your environment and run this command ::
+Add / replace scope of existing environment, replace the parameters to match your environment and run this command:
 
     python al_ci_aws_cross_setup.py ADD --user first.last@company.com --pswd MyCloudInsightPassword --cid 10000 --envid 89C90B43-7C50-4766-8ECD-37F9B9CD150B --scope input.json
+
+
+### Add Scope + Guided
+Add / replace scope of existing environment, will attempt to launch scanner in the target subnet:
+
+    python al_ci_aws_cross_setup.py ADD --user first.last@company.com --pswd MyCloudInsightPassword --cid 10000 --envid 89C90B43-7C50-4766-8ECD-37F9B9CD150B --scope input.json --otis otis.json
 
 Take note of the output from the script, you will need to record the Environment ID if you wish to delete it later using this script (see below).
 
 The input scope will be used as the final scope (replacing the existing scope). If you add new VPC into the scope, then a new Cloud Insight scanner will be launched on the target VPC. If you remove VPC from the scope, then the Cloud Insight scanner on that VPC will be removed.
 
-## Sample Usage - Add + Guided
-Add / replace scope of existing environment, replace the parameters to match your environment and run this command ::
-
-    python al_ci_aws_cross_setup.py ADD --user first.last@company.com --pswd MyCloudInsightPassword --cid 10000 --envid 89C90B43-7C50-4766-8ECD-37F9B9CD150B --scope input.json --otis otis.json
-
 ## Sample Usage - Append
-Append to existing environment scope, replace the parameters to match your environment and run this command ::
+Append to existing environment scope, replace the parameters to match your environment and run this command:
 
     python al_ci_aws_cross_setup.py APD --user first.last@company.com --pswd MyCloudInsightPassword --cid 10000 --envid 89C90B43-7C50-4766-8ECD-37F9B9CD150B --scope input.json
+
+### Append Scope + Guided
+Append to existing environment scope, will attempt to launch scanner in the target subnet:
+
+    python al_ci_aws_cross_setup.py APD --user first.last@company.com --pswd MyCloudInsightPassword --cid 10000 --envid 89C90B43-7C50-4766-8ECD-37F9B9CD150B --scope input.json --otis otis.json
 
 Take note of the output from the script, you will need to record the Environment ID if you wish to delete it later using this script (see below).
 
 The input scope will be appened to existing environment. The VPC or region in the existing scope will not be touched / modified.
 
 ## Sample Usage - Remove
-Remove scope from existing environment, replace the parameters to match your environment and run this command ::
+Remove scope from existing environment, replace the parameters to match your environment and run this command:
+
+    python al_ci_aws_cross_setup.py RMV --user first.last@company.com --pswd MyCloudInsightPassword --cid 10000 --envid 89C90B43-7C50-4766-8ECD-37F9B9CD150B --scope input.json
+
+### Remove Scope + Guided
+Remove scope from existing environment, will attempt to remove scanner from the target subnet:
 
     python al_ci_aws_cross_setup.py RMV --user first.last@company.com --pswd MyCloudInsightPassword --cid 10000 --envid 89C90B43-7C50-4766-8ECD-37F9B9CD150B --scope input.json
 
@@ -78,6 +89,10 @@ Delete existing environment, replace the parameters to match your environment an
 
     python al_ci_aws_cross_setup.py DEL --user first.last@company.com --pswd MyCloudInsightPassword --cid 10000 --envid 89C90B43-7C50-4766-8ECD-37F9B9CD150B
 
+### Delete + Guided
+Delete existing environment and remove scanner from the target subnet:
+
+    python al_ci_aws_cross_setup.py DEL --user first.last@company.com --pswd MyCloudInsightPassword --cid 10000 --envid 89C90B43-7C50-4766-8ECD-37F9B9CD150B
 
 ## Arguments
 Argument | Value | Description
@@ -95,7 +110,7 @@ Argument | Value | Description
 --time | numeric | time out in second for this script to run
 --filter | | Filter the output to only show the new changes
 --skip | | Skip schema validation check
---otis	| `.json or `.csv` | json/csv formated file with the target subnet for Guided mode
+--otis	| `.json` or `.csv` | json/csv formated file with the target subnet for Guided mode
 
 The `input.json` or `input.csv` file sample can be found inside this repository, if you use the `.csv` format, the script will automatically reformat it to match the `.json` format. More details about the schema can be found in [here]( https://console.cloudinsight.alertlogic.com/api/sources/#api-JSON_Formats-AWSEnvironmentSourceJSONFormat)
 
