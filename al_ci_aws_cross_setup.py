@@ -346,7 +346,12 @@ def get_saturn_status(token, target_env, target_cid):
 
 	print ("Retrieving Environment launch status : " + str(REQUEST.status_code), str(REQUEST.reason))
 	if REQUEST.status_code == 200:
-		RESULT = json.loads(REQUEST.text)
+		SATURN_RESULT = json.loads(REQUEST.text)
+		RESULT = []
+		for SATURN_VPC in SATURN_RESULT:
+			if "deployment_id" in SATURN_VPC:
+				if SATURN_VPC["deployment_id"] == target_env:
+					RESULT.append(SATURN_VPC)
 	else:
 		RESULT = False
 	return RESULT
@@ -914,7 +919,6 @@ if __name__ == '__main__':
 			print ("### No otis options included ###")
 			VALID_OTIS = False
 
-		#TODO: add otis config
 		if VALID_OTIS:
 			for options in OTIS_OPTIONS:
 				OPTION_RESULT = post_otis_options(TOKEN, json.dumps(options, indent=3), TARGET_CID)
@@ -1126,7 +1130,6 @@ if __name__ == '__main__':
 					#Check and wait until launcher completed
 					LAUNCHER_WAIT_STATE_COUNTER = 5
 
-					#TODO : conditional for otis (saturn) vs launcher
 					if VALID_OTIS:
 						while saturn_wait_state(TOKEN, ENV_ID, TARGET_CID, args.mode, SCRIPT_TIMEOUT) == False:
 							time.sleep(10)
